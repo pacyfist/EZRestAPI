@@ -15,9 +15,9 @@ public class DbContextGenerator : IIncrementalGenerator
 
             using Microsoft.EntityFrameworkCore;
             
-            public partial class DbContext : DbContext
+            public partial class CustomDbContext : DbContext
             {
-                public DbContext(DbContextOptions<DbContext> options)
+                public CustomDbContext(DbContextOptions<DbContext> options)
                     : base(options)
                 {
 

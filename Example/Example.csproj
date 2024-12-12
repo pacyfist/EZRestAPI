@@ -15,7 +15,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\EZRestAPI.Generators\EZRestAPI.Generators.csproj" OutputItemType="Analyzer" />
+    <ProjectReference Include="..\EZRestAPI\EZRestAPI.csproj" OutputItemType="Analyzer" />
   </ItemGroup>
 
 </Project>

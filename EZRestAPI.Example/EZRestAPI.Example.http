@@ -1,6 +1,0 @@
-@EZRestAPI.Example_HostAddress = http://localhost:5108
-
-GET {{EZRestAPI.Example_HostAddress}}/weatherforecast/
-Accept: application/json
-
-###
