@@ -30,7 +30,6 @@ public class DbContextGenerator : IIncrementalGenerator
             }
             """);
 
-
         var modelsProvider = context.SyntaxProvider.GetModels().Collect();
 
         context.RegisterSourceOutput(modelsProvider, (ctx, models) =>

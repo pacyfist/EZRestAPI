@@ -10,7 +10,12 @@ public static class ProviderExtensions
         string ModelNamespace,
         string ClassName,
         string SingularName,
-        string PluralName);
+        string PluralName,
+        IEnumerable<Property> Properties);
+
+    public record Property(
+        string TypeName,
+        string PropertyName);
 
     public static IncrementalValuesProvider<Model> GetModels(this SyntaxValueProvider provider)
     {
@@ -29,7 +34,15 @@ public static class ProviderExtensions
                     ModelNamespace: symbol.ContainingNamespace.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     ClassName: symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     SingularName: attr.ConstructorArguments[0].Value?.ToString() ?? "xxx",
-                    PluralName: attr.ConstructorArguments[1].Value?.ToString() ?? "xxx");
+                    PluralName: attr.ConstructorArguments[1].Value?.ToString() ?? "xxx",
+                    Properties: (symbol as INamedTypeSymbol).GetMembers()
+                        .Where(m => m is IPropertySymbol)
+                        .OfType<IPropertySymbol>()
+                        .Select(p => new Property(
+                            TypeName: p.Type.ToDisplayString(),
+                            PropertyName: p.Name))
+                        .ToList()
+                    );
             });
     }
 }
