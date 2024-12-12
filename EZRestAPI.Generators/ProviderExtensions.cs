@@ -3,9 +3,14 @@
 using Microsoft.CodeAnalysis;
 using System.Linq;
 
-public static class PipelinesExtensions
+public static class ProviderExtensions
 {
-    public record Model(string AssemblyName, string ModelNamespace, string ClassName, string SingularName, string PluralName);
+    public record Model(
+        string AssemblyName,
+        string ModelNamespace,
+        string ClassName,
+        string SingularName,
+        string PluralName);
 
     public static IncrementalValuesProvider<Model> GetModels(this SyntaxValueProvider provider)
     {
@@ -20,8 +25,8 @@ public static class PipelinesExtensions
                     .First(a => a.AttributeClass?.Name == "EZRestAPIModelAttribute");
 
                 return new Model(
-                    AssemblyName: symbol.ContainingAssembly.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
-                    ModelNamespace: symbol.ContainingNamespace.ToDisplayString(),
+                    AssemblyName: symbol.ContainingAssembly.Name,
+                    ModelNamespace: symbol.ContainingNamespace.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     ClassName: symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     SingularName: attr.ConstructorArguments[0].Value?.ToString() ?? "xxx",
                     PluralName: attr.ConstructorArguments[1].Value?.ToString() ?? "xxx");
