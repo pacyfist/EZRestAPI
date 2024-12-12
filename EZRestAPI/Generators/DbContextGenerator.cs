@@ -4,6 +4,7 @@ using Scriban;
 using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
+using EZRestAPI.Providers;
 
 [Generator(LanguageNames.CSharp)]
 public class DbContextGenerator : IIncrementalGenerator

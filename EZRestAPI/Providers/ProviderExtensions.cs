@@ -1,4 +1,4 @@
-﻿namespace EZRestAPI.Generators;
+﻿namespace EZRestAPI.Providers;
 
 using Microsoft.CodeAnalysis;
 using System.Linq;
