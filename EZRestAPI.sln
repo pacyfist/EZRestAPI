@@ -7,6 +7,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Example", "Example\Example.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "EZRestAPI", "EZRestAPI\EZRestAPI.csproj", "{47C95A73-04E9-4AA1-A1B6-29067AE8D911}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Example.Tests", "Example.Tests\Example.Tests.csproj", "{AD7E9033-34C8-426C-B8D0-E0E7858E1E77}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -24,5 +26,9 @@ Global
 		{47C95A73-04E9-4AA1-A1B6-29067AE8D911}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{47C95A73-04E9-4AA1-A1B6-29067AE8D911}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{47C95A73-04E9-4AA1-A1B6-29067AE8D911}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AD7E9033-34C8-426C-B8D0-E0E7858E1E77}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AD7E9033-34C8-426C-B8D0-E0E7858E1E77}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AD7E9033-34C8-426C-B8D0-E0E7858E1E77}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AD7E9033-34C8-426C-B8D0-E0E7858E1E77}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal
