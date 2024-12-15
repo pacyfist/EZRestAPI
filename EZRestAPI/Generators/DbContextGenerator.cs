@@ -18,7 +18,7 @@ public class DbContextGenerator : IIncrementalGenerator
             
             public partial class CustomDbContext : DbContext
             {
-                public CustomDbContext(DbContextOptions<DbContext> options)
+                public CustomDbContext(DbContextOptions<CustomDbContext> options)
                     : base(options)
                 {
 
