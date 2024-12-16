@@ -1,16 +1,16 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿namespace Example.Tests;
+
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
-namespace Example.Tests;
-
-public class CustomDbContextTests
+public class DbContextTests
 {
     readonly IServiceCollection serviceCollection;
 
-    public CustomDbContextTests()
+    public DbContextTests()
     {
         serviceCollection = new ServiceCollection()
-            .AddDbContext<CustomDbContext>(o => o.UseInMemoryDatabase("Test"));
+            .AddDbContext<CustomDbContext>(o => o.UseInMemoryDatabase(Guid.NewGuid().ToString()));
     }
 
     [Fact]
