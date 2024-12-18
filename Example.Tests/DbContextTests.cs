@@ -1,5 +1,6 @@
 ﻿namespace Example.Tests;
 
+using Bogus;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -21,13 +22,8 @@ public class DbContextTests
         var context = serviceProvider.GetRequiredService<CustomDbContext>();
 
         // Act
-        context.SimpleDataPlural.Add(new()
-        {
-            IntegerProperty = 1,
-            DoubleProperty = 1.1,
-            StringProperty = "Test",
-            DateTimeOffsetProperty = DateTimeOffset.Now
-        });
+        var simpleDataModel = new SimpleDataModelFaker();
+        context.SimpleDataPlural.Add(simpleDataModel);
         context.SaveChanges();
 
         // Assert

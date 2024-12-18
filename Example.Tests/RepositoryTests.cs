@@ -5,17 +5,22 @@ using Microsoft.Extensions.DependencyInjection;
 
 public class RepositoryTests
 {
+    readonly IServiceCollection serviceCollection;
+
+    public RepositoryTests()
+    {
+        serviceCollection = new ServiceCollection()
+            .AddDbContext<CustomDbContext>(o => o.UseInMemoryDatabase(Guid.NewGuid().ToString()))
+            .AddSingleton<SimpleDataRepository>();
+    }
+
     [Fact]
     public async Task CreateSimpleModel_ModelExists()
     {
         // Arrange
-        var ServiceProvider = new ServiceCollection()
-            .AddDbContext<CustomDbContext>(o => o.UseInMemoryDatabase(Guid.NewGuid().ToString()))
-            .AddSingleton<SimpleDataRepository>()
-            .BuildServiceProvider();
-
-        var context = ServiceProvider.GetRequiredService<CustomDbContext>();
-        var service = ServiceProvider.GetRequiredService<SimpleDataRepository>();
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+        var context = serviceProvider.GetRequiredService<CustomDbContext>();
+        var service = serviceProvider.GetRequiredService<SimpleDataRepository>();
 
         // Act
         await service.CreateAsync(
