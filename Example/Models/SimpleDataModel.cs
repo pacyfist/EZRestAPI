@@ -1,6 +1,6 @@
 ﻿namespace Example;
 
-[EZRestAPI.EZRestAPIModel("SimpleData", "SimpleDataPlural")]
+[EZRestAPI.Model("SimpleData", "SimpleDataPlural")]
 public class SimpleDataModel
 {
     public int Id { get; set; }

@@ -14,6 +14,8 @@ public class RepositoryGenerator : IIncrementalGenerator
         var template = Template.Parse("""
             namespace {{model.AssemblyName}};
             
+            using Microsoft.EntityFrameworkCore;
+
             {{func onlyRequired(p)
                 ret p.IsRequired
             end}}
@@ -35,6 +37,18 @@ public class RepositoryGenerator : IIncrementalGenerator
                     };
 
                     context.{{model.PluralName}}.Add(entity);
+                    await context.SaveChangesAsync(cancellationToken);
+                }
+
+                public async Task DeleteAsync(
+                    int Id,
+                    CancellationToken cancellationToken)
+                {
+                    await context
+                        .{{model.PluralName}}
+                        .Where(e => e.Id == Id)
+                        .ExecuteDeleteAsync(cancellationToken);
+                    
                     await context.SaveChangesAsync(cancellationToken);
                 }
             }

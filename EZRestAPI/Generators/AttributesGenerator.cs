@@ -17,7 +17,7 @@ public class AttributesGenerator : IIncrementalGenerator
                     namespace EZRestAPI;
 
                     [AttributeUsage(AttributeTargets.Class)]
-                    public partial class EZRestAPIModelAttribute(string SingularName, string PluralName)
+                    public partial class ModelAttribute(string SingularName, string PluralName)
                         : Attribute
                     {
                     }

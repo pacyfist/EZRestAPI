@@ -1,6 +1,7 @@
 ﻿namespace EZRestAPI.Providers;
 
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 
 public static class ProviderExtensions
@@ -22,30 +23,31 @@ public static class ProviderExtensions
     public static IncrementalValuesProvider<Model> GetModels(this SyntaxValueProvider provider)
     {
         return provider.ForAttributeWithMetadataName(
-            fullyQualifiedMetadataName: "EZRestAPI.EZRestAPIModelAttribute",
-            predicate: static (syntaxNode, cancellationToken) => true,
+            fullyQualifiedMetadataName: "EZRestAPI.ModelAttribute",
+            predicate: static (syntaxNode, cancellationToken) => syntaxNode is ClassDeclarationSyntax,
             transform: static (context, cancellationToken) =>
             {
                 var symbol = context.TargetSymbol;
+                var namedTypeSymbol = symbol as INamedTypeSymbol;
 
-                var attr = context.Attributes
-                    .First(a => a.AttributeClass?.Name == "EZRestAPIModelAttribute");
+                var attribute = context.Attributes.Single();
+                var singularName = attribute.ConstructorArguments[0].Value?.ToString() ?? "SingularNameNotSet";
+                var pluralName = attribute.ConstructorArguments[1].Value?.ToString() ?? "PluralNameNotSet";
+
+                var properties = namedTypeSymbol?.GetMembers().OfType<IPropertySymbol>() ?? [];
 
                 return new Model(
                     AssemblyName: symbol.ContainingAssembly.Name,
                     ModelNamespace: symbol.ContainingNamespace.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     ClassName: symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     ModelName: symbol.Name,
-                    SingularName: attr.ConstructorArguments[0].Value?.ToString() ?? "xxx",
-                    PluralName: attr.ConstructorArguments[1].Value?.ToString() ?? "xxx",
-                    Properties: (symbol as INamedTypeSymbol).GetMembers()
-                        .Where(m => m is IPropertySymbol)
-                        .OfType<IPropertySymbol>()
+                    SingularName: singularName,
+                    PluralName: pluralName,
+                    Properties: properties
                         .Select(p => new Property(
                             IsRequired: p.IsRequired,
                             TypeName: p.Type.ToDisplayString(),
                             PropertyName: p.Name))
-                        .ToList()
                     );
             });
     }
