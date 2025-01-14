@@ -40,10 +40,10 @@ public class RepositoryTests : IAsyncLifetime
 
         // Act
         await service.CreateAsync(
-            IntegerProperty: 1,
-            DoubleProperty: 1.1,
-            StringProperty: "Test",
-            DateTimeOffsetProperty: DateTimeOffset.Now,
+            param_IntegerProperty: 1,
+            param_DoubleProperty: 1.1,
+            param_StringProperty: "Test",
+            param_DateTimeOffsetProperty: DateTimeOffset.Now,
             CancellationToken.None);
 
         Assert.Equal(1, context.SimpleDataPlural.Count());
@@ -65,7 +65,7 @@ public class RepositoryTests : IAsyncLifetime
 
         // Act
         await service.DeleteAsync(
-            Id: model.Id,
+            id: model.Id,
             CancellationToken.None);
 
         Assert.Equal(0, context.SimpleDataPlural.Count());
