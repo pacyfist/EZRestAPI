@@ -1,4 +1,5 @@
 ﻿using Bogus;
+using Example.Models;
 
 namespace Example.Tests;
 

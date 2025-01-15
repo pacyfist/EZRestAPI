@@ -11,24 +11,25 @@ public class RepositoryGenerator : IIncrementalGenerator
 {
     public void InsertCreateMethod(ref IndentedTextWriter writer, ProviderExtensions.Model model)
     {
-        var requiredProperties = model.Properties.Where(p => p.IsRequired);
-        var methodParameters = string.Join(", ", requiredProperties.Select(p => $"{p.TypeName} param_{p.PropertyName}"));
+        var methodParameters = string.Join(", ", model.Properties.Select(p => $"{p.TypeName} {p.PropertyName.ToCamelCase()}"));
 
-        writer.WriteLine($"public async Task CreateAsync({methodParameters}, CancellationToken cancellationToken)");
+        writer.WriteLine($"public async Task<int> CreateAsync({methodParameters}, CancellationToken cancellationToken)");
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine($"var entity = new {model.ModelName}()");
+        writer.WriteLine($"var entity = new {model.ClassName}()");
         writer.WriteLine("{");
         writer.Indent++;
-        foreach (var property in requiredProperties)
+        foreach (var property in model.Properties)
         {
-            writer.WriteLine($"{property.PropertyName} = param_{property.PropertyName},");
+            writer.WriteLine($"{property.PropertyName} = {property.PropertyName.ToCamelCase()},");
         }
         writer.Indent--;
         writer.WriteLine("};");
         writer.WriteLine();
         writer.WriteLine($"context.{model.PluralName}.Add(entity);");
         writer.WriteLine($"await context.SaveChangesAsync(cancellationToken);");
+        writer.WriteLine();
+        writer.WriteLine($"return entity.Id;");
         writer.Indent--;
         writer.WriteLine("}");
     }
@@ -36,16 +37,16 @@ public class RepositoryGenerator : IIncrementalGenerator
     public void InsertUpdateMethod(ref IndentedTextWriter writer, ProviderExtensions.Model model)
     {
         var requiredProperties = model.Properties.Where(p => p.IsRequired);
-        var methodParameters = string.Join(", ", requiredProperties.Select(p => $"{p.TypeName} param_{p.PropertyName}"));
+        var methodParameters = string.Join(", ", requiredProperties.Select(p => $"{p.TypeName} {p.PropertyName.ToCamelCase()}"));
 
-        writer.WriteLine($"public async Task UpdateAsync(int param_Id, {methodParameters}, CancellationToken cancellationToken)");
+        writer.WriteLine($"public async Task UpdateAsync(int id, {methodParameters}, CancellationToken cancellationToken)");
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine($"var entity = context.{model.PluralName}.Find(param_Id);");
+        writer.WriteLine($"var entity = context.{model.PluralName}.Find(id);");
         writer.WriteLine();
         foreach (var property in requiredProperties)
         {
-            writer.WriteLine($"entity.{property.PropertyName} = param_{property.PropertyName};");
+            writer.WriteLine($"entity.{property.PropertyName} = {property.PropertyName.ToCamelCase()};");
         }
         writer.WriteLine();
         writer.WriteLine($"await context.SaveChangesAsync(cancellationToken);");

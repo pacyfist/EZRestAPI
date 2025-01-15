@@ -6,8 +6,10 @@ using Testcontainers.MsSql;
 
 public class RepositoryTests : IAsyncLifetime
 {
-    private IServiceCollection serviceCollection = null!;
     private MsSqlContainer container = null!;
+
+    private CustomDbContext context = null!;
+    private SimpleDataRepository service = null!;
 
     public async Task InitializeAsync()
     {
@@ -16,9 +18,15 @@ public class RepositoryTests : IAsyncLifetime
 
         var connectionString = container.GetConnectionString();
 
-        serviceCollection = new ServiceCollection()
+        var serviceCollection = new ServiceCollection()
             .AddDbContext<CustomDbContext>(o => o.UseSqlServer(connectionString))
             .AddSingleton<SimpleDataRepository>();
+        var serviceProvider = serviceCollection.BuildServiceProvider();
+
+        context = serviceProvider.GetRequiredService<CustomDbContext>();
+        service = serviceProvider.GetRequiredService<SimpleDataRepository>();
+
+        await context.Database.EnsureCreatedAsync();
     }
 
     public async Task DisposeAsync()
@@ -29,36 +37,30 @@ public class RepositoryTests : IAsyncLifetime
 
 
     [Fact]
-    public async Task SimpleModel_Create_IsCreated()
+    public async Task SimpleModel_Create_Delete_CheckCounts()
     {
-        // Arrange
-        var serviceProvider = serviceCollection.BuildServiceProvider();
-        var context = serviceProvider.GetRequiredService<CustomDbContext>();
-        var service = serviceProvider.GetRequiredService<SimpleDataRepository>();
+        Assert.Equal(0, context.SimpleDataPlural.Count());
 
-        await context.Database.EnsureCreatedAsync();
-
-        // Act
-        await service.CreateAsync(
-            param_IntegerProperty: 1,
-            param_DoubleProperty: 1.1,
-            param_StringProperty: "Test",
-            param_DateTimeOffsetProperty: DateTimeOffset.Now,
+        var id = await service.CreateAsync(
+            integerProperty: 1,
+            doubleProperty: 1.1,
+            stringProperty: "Test",
+            dateTimeOffsetProperty: DateTimeOffset.Now,
             CancellationToken.None);
 
         Assert.Equal(1, context.SimpleDataPlural.Count());
+
+        await service.DeleteAsync(
+            id: id,
+            CancellationToken.None);
+
+        Assert.Equal(0, context.SimpleDataPlural.Count());
     }
 
     [Fact]
     public async Task SimpleModel_Delete_IsDeleted()
     {
         // Arrange
-        var serviceProvider = serviceCollection.BuildServiceProvider();
-        var context = serviceProvider.GetRequiredService<CustomDbContext>();
-        var service = serviceProvider.GetRequiredService<SimpleDataRepository>();
-
-        await context.Database.EnsureCreatedAsync();
-
         var model = new SimpleDataModelFaker().Generate();
         context.SimpleDataPlural.Add(model);
         context.SaveChanges();
