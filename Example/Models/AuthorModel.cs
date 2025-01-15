@@ -1,14 +1,11 @@
-namespace Example;
+namespace Example.Models;
 
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 [EZRestAPI.Model("Author", "Authors")]
-public class AuthorModel
+public partial class AuthorModel
 {
-    [Key]
-    public int Id { get; set; }
-
     // String Types
     [MaxLength(255)]
     public required string FirstName { get; set; } // nvarchar(255)
