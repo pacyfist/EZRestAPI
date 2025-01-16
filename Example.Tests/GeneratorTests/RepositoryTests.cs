@@ -37,7 +37,7 @@ public class RepositoryTests : IAsyncLifetime
 
 
     [Fact]
-    public async Task SimpleModel_Create_Delete_CheckCounts()
+    public async Task SimpleModel_CreateDelete_Counts()
     {
         Assert.Equal(0, context.SimpleDataPlural.Count());
 
@@ -58,16 +58,37 @@ public class RepositoryTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SimpleModel_Delete_IsDeleted()
+    public async Task SimpleModel_CreateUpdateReadDelete_Counts()
     {
-        // Arrange
-        var model = new SimpleDataModelFaker().Generate();
-        context.SimpleDataPlural.Add(model);
-        context.SaveChanges();
+        Assert.Equal(0, context.SimpleDataPlural.Count());
 
-        // Act
+        var id = await service.CreateAsync(
+            integerProperty: 1,
+            doubleProperty: 1.1,
+            stringProperty: "Test",
+            dateTimeOffsetProperty: DateTimeOffset.Now,
+            CancellationToken.None);
+
+        Assert.Equal("Test", context.SimpleDataPlural.First().StringProperty);
+
+        await service.UpdateAsync(
+            id: id,
+            integerProperty: 2,
+            doubleProperty: 2.2,
+            stringProperty: "Test2",
+            dateTimeOffsetProperty: DateTimeOffset.Now,
+            CancellationToken.None);
+
+        Assert.Equal("Test2", context.SimpleDataPlural.First().StringProperty);
+
+        var result = await service.ReadAsync(
+            id: id,
+            CancellationToken.None);
+
+        Assert.Equal("Test2", result.StringProperty);
+
         await service.DeleteAsync(
-            id: model.Id,
+            id: id,
             CancellationToken.None);
 
         Assert.Equal(0, context.SimpleDataPlural.Count());

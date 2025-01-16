@@ -52,7 +52,7 @@ public partial class AuthorModel
 
     // Binary Type
     [MaxLength(512)]
-    public byte[] ProfilePicture { get; set; } // varbinary(512)
+    public byte[] ProfilePicture { get; set; } = null!;// varbinary(512)
 
     public byte[]? ImageData { get; set; } // varbinary(max)
 

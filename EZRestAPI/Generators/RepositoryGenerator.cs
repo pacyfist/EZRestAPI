@@ -34,17 +34,31 @@ public class RepositoryGenerator : IIncrementalGenerator
         writer.WriteLine("}");
     }
 
+    public void InsertReadMethod(ref IndentedTextWriter writer, ProviderExtensions.Model model)
+    {
+        var tupleDefinition = string.Join(", ", model.Properties.Select(p => $"{p.TypeName} {p.PropertyName}"));
+        var tupleValues = string.Join(", ", model.Properties.Select(p => $"entity.{p.PropertyName}"));
+
+        writer.WriteLine($"public async Task<({tupleDefinition})> ReadAsync(int id, CancellationToken cancellationToken)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine($"var entity = await context.{model.PluralName}.AsNoTracking().FirstAsync(s => s.Id == id, cancellationToken);");
+        writer.WriteLine();
+        writer.WriteLine($"return ({tupleValues});");
+        writer.Indent--;
+        writer.WriteLine("}");
+    }
+
     public void InsertUpdateMethod(ref IndentedTextWriter writer, ProviderExtensions.Model model)
     {
-        var requiredProperties = model.Properties.Where(p => p.IsRequired);
-        var methodParameters = string.Join(", ", requiredProperties.Select(p => $"{p.TypeName} {p.PropertyName.ToCamelCase()}"));
+        var methodParameters = string.Join(", ", model.Properties.Select(p => $"{p.TypeName} {p.PropertyName.ToCamelCase()}"));
 
         writer.WriteLine($"public async Task UpdateAsync(int id, {methodParameters}, CancellationToken cancellationToken)");
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine($"var entity = context.{model.PluralName}.Find(id);");
+        writer.WriteLine($"var entity = await context.{model.PluralName}.FirstAsync(s => s.Id == id, cancellationToken);");
         writer.WriteLine();
-        foreach (var property in requiredProperties)
+        foreach (var property in model.Properties)
         {
             writer.WriteLine($"entity.{property.PropertyName} = {property.PropertyName.ToCamelCase()};");
         }
@@ -56,19 +70,10 @@ public class RepositoryGenerator : IIncrementalGenerator
 
     public void InsertDeleteMethod(ref IndentedTextWriter writer, ProviderExtensions.Model model)
     {
-        var requiredProperties = model.Properties.Where(p => p.IsRequired);
-        var methodParameters = string.Join(", ", requiredProperties.Select(p => $"{p.TypeName} param_{p.PropertyName}"));
-
         writer.WriteLine($"public async Task DeleteAsync(int id, CancellationToken cancellationToken)");
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine($"await context.{model.PluralName}");
-        writer.Indent++;
-        writer.WriteLine(".Where(e => e.Id == id)");
-        writer.WriteLine(".ExecuteDeleteAsync(cancellationToken);");
-        writer.Indent--;
-        writer.WriteLine();
-        writer.WriteLine($"await context.SaveChangesAsync(cancellationToken);");
+        writer.WriteLine($"await context.{model.PluralName}.Where(e => e.Id == id).ExecuteDeleteAsync(cancellationToken);");
         writer.Indent--;
         writer.WriteLine("}");
     }
@@ -90,6 +95,8 @@ public class RepositoryGenerator : IIncrementalGenerator
             writer.Indent++;
             InsertCreateMethod(ref writer, model);
             writer.WriteLine();
+            InsertReadMethod(ref writer, model);
+            writer.WriteLine();
             InsertUpdateMethod(ref writer, model);
             writer.WriteLine();
             InsertDeleteMethod(ref writer, model);
@@ -97,7 +104,7 @@ public class RepositoryGenerator : IIncrementalGenerator
             writer.WriteLine("}");
 
             ctx.AddSource(
-                $"{model.SingularName}Service.g.cs",
+                $"{model.SingularName}Repository.g.cs",
                 SourceText.From(
                     writer.InnerWriter.ToString(),
                     Encoding.UTF8));
