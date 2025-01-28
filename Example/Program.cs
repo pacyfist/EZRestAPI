@@ -23,14 +23,21 @@ app.UseHttpsRedirection();
 
 var group = app.MapGroup("/simpledatamodels");
 
-group.MapGet("/create", async ([FromServices]SimpleDataRepository repository, CancellationToken cancellationToken) =>
+
+
+group.MapGet("/create", async (
+    [FromServices] SimpleDataRepository repository,
+    [FromBody] CreateSimpleDataRequest data,
+    CancellationToken cancellationToken) =>
 {
-    return await repository.CreateAsync(
-        integerProperty: 1,
-        doubleProperty: 1.1,
-        stringProperty: "Test",
-        dateTimeOffsetProperty: DateTimeOffset.Now,
+    var id = await repository.CreateAsync(
+        integerProperty: data.IntegerProperty,
+        doubleProperty: data.DoubleProperty,
+        stringProperty: data.StringProperty,
+        dateTimeOffsetProperty: data.DateTimeOffsetProperty,
         cancellationToken);
+
+    return Results.Ok(id);
 })
 .WithName("GetWeatherForecast");
 
