@@ -15,7 +15,7 @@ public class ModelGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
         {
-            IndentedTextWriter writer = new(new StringWriter());
+            var writer = new IndentedTextWriter(new StringWriter());
 
             writer.WriteLine($"namespace {model.ModelNamespace.ToCleanNamespace()};");
             writer.WriteLine();

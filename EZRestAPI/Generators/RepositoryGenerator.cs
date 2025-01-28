@@ -84,7 +84,7 @@ public class RepositoryGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
         {
-            IndentedTextWriter writer = new IndentedTextWriter(new StringWriter());
+            var writer = new IndentedTextWriter(new StringWriter());
 
             writer.WriteLine($"namespace {model.AssemblyName};");
             writer.WriteLine();
