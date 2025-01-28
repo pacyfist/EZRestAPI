@@ -37,7 +37,14 @@ group.MapGet("/create", async (
         dateTimeOffsetProperty: data.DateTimeOffsetProperty,
         cancellationToken);
 
-    return Results.Ok(id);
+    return Results.Ok(new CreateSimpleDataResponse()
+    {
+        Id = id,
+        IntegerProperty = data.IntegerProperty,
+        DoubleProperty = data.DoubleProperty,
+        StringProperty = data.StringProperty,
+        DateTimeOffsetProperty = data.DateTimeOffsetProperty
+    });
 })
 .WithName("GetWeatherForecast");
 
