@@ -15,10 +15,12 @@ public class DtoGenerator : IIncrementalGenerator
 
         RegisterCreateRequest(context, modelsProvider);
         RegisterCreateResponse(context, modelsProvider);
+        RegisterReadResponse(context, modelsProvider);
+        RegisterUpdateRequest(context, modelsProvider);
     }
 
     private static void RegisterCreateRequest(IncrementalGeneratorInitializationContext context, IncrementalValuesProvider<ProviderExtensions.Model> modelsProvider)
-{
+    {
         context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
         {
             var writer = new IndentedTextWriter(new StringWriter());
@@ -69,4 +71,60 @@ public class DtoGenerator : IIncrementalGenerator
                     Encoding.UTF8));
         });
     }
+
+    private static void RegisterReadResponse(IncrementalGeneratorInitializationContext context, IncrementalValuesProvider<ProviderExtensions.Model> modelsProvider)
+    {
+        context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
+        {
+            var writer = new IndentedTextWriter(new StringWriter());
+
+            writer.WriteLine($"namespace {model.AssemblyName};");
+            writer.WriteLine();
+            writer.WriteLine($"public class Read{model.SingularName}Response");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("public int? Id { get; set; }");
+            foreach (var property in model.Properties)
+            {
+                writer.WriteLine($"public {property.TypeName}? {property.PropertyName} {{ get; set; }}");
+            }
+            writer.Indent--;
+            writer.WriteLine("}");
+
+            ctx.AddSource(
+                $"Read{model.SingularName}Response.g.cs",
+                SourceText.From(
+                    writer.InnerWriter.ToString(),
+                    Encoding.UTF8));
+        });
+    }
+
+    private static void RegisterUpdateRequest(IncrementalGeneratorInitializationContext context, IncrementalValuesProvider<ProviderExtensions.Model> modelsProvider)
+    {
+        context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
+        {
+            var writer = new IndentedTextWriter(new StringWriter());
+
+            writer.WriteLine($"namespace {model.AssemblyName};");
+            writer.WriteLine();
+            writer.WriteLine($"public class Update{model.SingularName}Request");
+            writer.WriteLine("{");
+            writer.Indent++;
+            writer.WriteLine("public int Id { get; set; }");
+            foreach (var property in model.Properties)
+            {
+                writer.WriteLine($"public {property.TypeName} {property.PropertyName} {{ get; set; }}");
+            }
+            writer.Indent--;
+            writer.WriteLine("}");
+
+            ctx.AddSource(
+                $"Update{model.SingularName}Request.g.cs",
+                SourceText.From(
+                    writer.InnerWriter.ToString(),
+                    Encoding.UTF8));
+        });
+    }
+
+
 }
