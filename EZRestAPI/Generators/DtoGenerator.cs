@@ -86,7 +86,7 @@ public class DtoGenerator : IIncrementalGenerator
             writer.WriteLine("public int? Id { get; set; }");
             foreach (var property in model.Properties)
             {
-                writer.WriteLine($"public {property.TypeName}? {property.PropertyName} {{ get; set; }}");
+                writer.WriteLine($"public {property.TypeName} {property.PropertyName} {{ get; set; }}");
             }
             writer.Indent--;
             writer.WriteLine("}");
@@ -125,6 +125,4 @@ public class DtoGenerator : IIncrementalGenerator
                     Encoding.UTF8));
         });
     }
-
-
 }
