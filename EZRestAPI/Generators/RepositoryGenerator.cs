@@ -1,4 +1,4 @@
-﻿namespace EZRestAPI.Generators;
+namespace EZRestAPI.Generators;
 
 using System.CodeDom.Compiler;
 using System.Text;
@@ -15,13 +15,8 @@ public class RepositoryGenerator : IIncrementalGenerator
         ProviderExtensions.Model model
     )
     {
-        var methodParameters = string.Join(
-            ", ",
-            model.Properties.Select(p => $"{p.DtoTypeName} {p.PropertyName.ToCamelCase()}")
-        );
-
         writer.WriteLine(
-            $"public async Task<int> CreateAsync({methodParameters}, CancellationToken cancellationToken)"
+            $"public async Task<int> CreateAsync(Create{model.SingularName}Request request, CancellationToken cancellationToken)"
         );
         writer.WriteLine("{");
         writer.Indent++;
@@ -31,7 +26,7 @@ public class RepositoryGenerator : IIncrementalGenerator
         foreach (var property in model.Properties)
         {
             writer.WriteLine(
-                $"{property.PropertyName} = {property.ToEntityExpression(property.PropertyName.ToCamelCase())},"
+                $"{property.PropertyName} = {property.ToEntityExpression($"request.{property.PropertyName}")},"
             );
         }
         writer.Indent--;
@@ -47,17 +42,8 @@ public class RepositoryGenerator : IIncrementalGenerator
 
     private static void InsertReadMethod(IndentedTextWriter writer, ProviderExtensions.Model model)
     {
-        var tupleDefinition = string.Join(
-            ", ",
-            model.Properties.Select(p => $"{p.DtoTypeName} {p.PropertyName}")
-        );
-        var tupleValues = string.Join(
-            ", ",
-            model.Properties.Select(p => p.ToDtoExpression($"entity.{p.PropertyName}"))
-        );
-
         writer.WriteLine(
-            $"public async Task<({tupleDefinition})?> ReadAsync(int id, CancellationToken cancellationToken)"
+            $"public async Task<Read{model.SingularName}Response?> ReadAsync(int id, CancellationToken cancellationToken)"
         );
         writer.WriteLine("{");
         writer.Indent++;
@@ -72,7 +58,18 @@ public class RepositoryGenerator : IIncrementalGenerator
         writer.Indent--;
         writer.WriteLine("}");
         writer.WriteLine();
-        writer.WriteLine($"return ({tupleValues});");
+        writer.WriteLine($"return new Read{model.SingularName}Response()");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("Id = entity.Id,");
+        foreach (var property in model.Properties)
+        {
+            writer.WriteLine(
+                $"{property.PropertyName} = {property.ToDtoExpression($"entity.{property.PropertyName}")},"
+            );
+        }
+        writer.Indent--;
+        writer.WriteLine("};");
         writer.Indent--;
         writer.WriteLine("}");
     }
@@ -82,13 +79,8 @@ public class RepositoryGenerator : IIncrementalGenerator
         ProviderExtensions.Model model
     )
     {
-        var methodParameters = string.Join(
-            ", ",
-            model.Properties.Select(p => $"{p.DtoTypeName} {p.PropertyName.ToCamelCase()}")
-        );
-
         writer.WriteLine(
-            $"public async Task<bool> UpdateAsync(int id, {methodParameters}, CancellationToken cancellationToken)"
+            $"public async Task<bool> UpdateAsync(int id, Update{model.SingularName}Request request, CancellationToken cancellationToken)"
         );
         writer.WriteLine("{");
         writer.Indent++;
@@ -106,7 +98,7 @@ public class RepositoryGenerator : IIncrementalGenerator
         foreach (var property in model.Properties)
         {
             writer.WriteLine(
-                $"entity.{property.PropertyName} = {property.ToEntityExpression(property.PropertyName.ToCamelCase())};"
+                $"entity.{property.PropertyName} = {property.ToEntityExpression($"request.{property.PropertyName}")};"
             );
         }
         writer.WriteLine();

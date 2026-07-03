@@ -42,10 +42,13 @@ public class RepositoryTests : IAsyncLifetime
         Assert.Equal(0, context.SimpleDataPlural.Count());
 
         var id = await service.CreateAsync(
-            integerProperty: 1,
-            doubleProperty: 1.1,
-            stringProperty: "Test",
-            dateTimeOffsetProperty: DateTimeOffset.Now,
+            new CreateSimpleDataRequest
+            {
+                IntegerProperty = 1,
+                DoubleProperty = 1.1,
+                StringProperty = "Test",
+                DateTimeOffsetProperty = DateTimeOffset.Now,
+            },
             CancellationToken.None
         );
 
@@ -62,21 +65,28 @@ public class RepositoryTests : IAsyncLifetime
         Assert.Equal(0, context.SimpleDataPlural.Count());
 
         var id = await service.CreateAsync(
-            integerProperty: 1,
-            doubleProperty: 1.1,
-            stringProperty: "Test",
-            dateTimeOffsetProperty: DateTimeOffset.Now,
+            new CreateSimpleDataRequest
+            {
+                IntegerProperty = 1,
+                DoubleProperty = 1.1,
+                StringProperty = "Test",
+                DateTimeOffsetProperty = DateTimeOffset.Now,
+            },
             CancellationToken.None
         );
 
         Assert.Equal("Test", context.SimpleDataPlural.First().StringProperty);
 
         await service.UpdateAsync(
-            id: id,
-            integerProperty: 2,
-            doubleProperty: 2.2,
-            stringProperty: "Test2",
-            dateTimeOffsetProperty: DateTimeOffset.Now,
+            id,
+            new UpdateSimpleDataRequest
+            {
+                Id = id,
+                IntegerProperty = 2,
+                DoubleProperty = 2.2,
+                StringProperty = "Test2",
+                DateTimeOffsetProperty = DateTimeOffset.Now,
+            },
             CancellationToken.None
         );
 

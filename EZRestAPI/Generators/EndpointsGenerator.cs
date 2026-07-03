@@ -26,16 +26,7 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.Indent--;
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine("var id = await repository.CreateAsync(");
-        writer.Indent++;
-        foreach (var property in model.Properties)
-        {
-            writer.WriteLine(
-                $"{property.PropertyName.ToCamelCase()}: request.{property.PropertyName},"
-            );
-        }
-        writer.WriteLine("cancellationToken: cancellationToken);");
-        writer.Indent--;
+        writer.WriteLine("var id = await repository.CreateAsync(request, cancellationToken);");
         writer.WriteLine();
         writer.WriteLine($"var response = new Create{model.SingularName}Response()");
         writer.WriteLine("{");
@@ -66,25 +57,14 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.Indent--;
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine("var entity = await repository.ReadAsync(id, cancellationToken);");
+        writer.WriteLine("var response = await repository.ReadAsync(id, cancellationToken);");
         writer.WriteLine();
-        writer.WriteLine("if (entity is null)");
+        writer.WriteLine("if (response is null)");
         writer.WriteLine("{");
         writer.Indent++;
         writer.WriteLine("return Results.NotFound();");
         writer.Indent--;
         writer.WriteLine("}");
-        writer.WriteLine();
-        writer.WriteLine($"var response = new Read{model.SingularName}Response()");
-        writer.WriteLine("{");
-        writer.Indent++;
-        writer.WriteLine("Id = id,");
-        foreach (var property in model.Properties)
-        {
-            writer.WriteLine($"{property.PropertyName} = entity.Value.{property.PropertyName},");
-        }
-        writer.Indent--;
-        writer.WriteLine("};");
         writer.WriteLine();
         writer.WriteLine("return Results.Ok(response);");
         writer.Indent--;
@@ -105,17 +85,9 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.Indent--;
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine("var updated = await repository.UpdateAsync(");
-        writer.Indent++;
-        writer.WriteLine("id: id,");
-        foreach (var property in model.Properties)
-        {
-            writer.WriteLine(
-                $"{property.PropertyName.ToCamelCase()}: request.{property.PropertyName},"
-            );
-        }
-        writer.WriteLine("cancellationToken: cancellationToken);");
-        writer.Indent--;
+        writer.WriteLine(
+            "var updated = await repository.UpdateAsync(id, request, cancellationToken);"
+        );
         writer.WriteLine();
         writer.WriteLine("return updated ? Results.NoContent() : Results.NotFound();");
         writer.Indent--;
