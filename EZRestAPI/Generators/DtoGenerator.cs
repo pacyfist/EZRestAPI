@@ -39,7 +39,7 @@ public class DtoGenerator : IIncrementalGenerator
                 foreach (var property in model.Properties)
                 {
                     writer.WriteLine(
-                        $"public {(property.NeedsRequiredModifier ? "required " : "")}{property.TypeName} {property.PropertyName} {{ get; set; }}"
+                        $"public {(property.NeedsRequiredModifier ? "required " : "")}{property.DtoTypeName} {property.PropertyName} {{ get; set; }}"
                     );
                 }
                 writer.Indent--;
@@ -73,7 +73,7 @@ public class DtoGenerator : IIncrementalGenerator
                 foreach (var property in model.Properties)
                 {
                     writer.WriteLine(
-                        $"public {(property.NeedsRequiredModifier ? "required " : "")}{property.TypeName} {property.PropertyName} {{ get; set; }}"
+                        $"public {(property.NeedsRequiredModifier ? "required " : "")}{property.DtoTypeName} {property.PropertyName} {{ get; set; }}"
                     );
                 }
                 writer.Indent--;
@@ -107,7 +107,7 @@ public class DtoGenerator : IIncrementalGenerator
                 foreach (var property in model.Properties)
                 {
                     writer.WriteLine(
-                        $"public {(property.NeedsRequiredModifier ? "required " : "")}{property.TypeName} {property.PropertyName} {{ get; set; }}"
+                        $"public {(property.NeedsRequiredModifier ? "required " : "")}{property.DtoTypeName} {property.PropertyName} {{ get; set; }}"
                     );
                 }
                 writer.Indent--;
@@ -141,7 +141,7 @@ public class DtoGenerator : IIncrementalGenerator
                 foreach (var property in model.Properties)
                 {
                     writer.WriteLine(
-                        $"public {(property.NeedsRequiredModifier ? "required " : "")}{property.TypeName} {property.PropertyName} {{ get; set; }}"
+                        $"public {(property.NeedsRequiredModifier ? "required " : "")}{property.DtoTypeName} {property.PropertyName} {{ get; set; }}"
                     );
                 }
                 writer.Indent--;

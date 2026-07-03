@@ -10,6 +10,36 @@ using Microsoft.CodeAnalysis.Text;
 [Generator(LanguageNames.CSharp)]
 public class DbContextGenerator : IIncrementalGenerator
 {
+    private static void InsertOwnedConfiguration(
+        IndentedTextWriter writer,
+        string builderName,
+        ProviderExtensions.Property property,
+        int depth
+    )
+    {
+        var method =
+            property.Kind == ProviderExtensions.NestedKind.Collection ? "OwnsMany" : "OwnsOne";
+        var nestedChildren = property
+            .Nested!.Properties.Where(p => p.Kind != ProviderExtensions.NestedKind.None)
+            .ToList();
+
+        if (nestedChildren.Count == 0)
+        {
+            writer.WriteLine($"{builderName}.{method}(e => e.{property.PropertyName});");
+            return;
+        }
+
+        writer.WriteLine($"{builderName}.{method}(e => e.{property.PropertyName}, owned{depth} =>");
+        writer.WriteLine("{");
+        writer.Indent++;
+        foreach (var child in nestedChildren)
+        {
+            InsertOwnedConfiguration(writer, $"owned{depth}", child, depth + 1);
+        }
+        writer.Indent--;
+        writer.WriteLine("});");
+    }
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModels().Collect();
@@ -47,6 +77,42 @@ public class DbContextGenerator : IIncrementalGenerator
                     writer.WriteLine(
                         $"public DbSet<{model.ClassName}> {model.PluralName} {{ get; set; }} = null!;"
                     );
+                }
+
+                var modelsWithNested = models
+                    .Where(m => m.Properties.Any(p => p.Kind != ProviderExtensions.NestedKind.None))
+                    .ToList();
+
+                if (modelsWithNested.Count > 0)
+                {
+                    writer.WriteLine();
+                    writer.WriteLine(
+                        "protected override void OnModelCreating(ModelBuilder modelBuilder)"
+                    );
+                    writer.WriteLine("{");
+                    writer.Indent++;
+                    writer.WriteLine("base.OnModelCreating(modelBuilder);");
+
+                    foreach (var model in modelsWithNested)
+                    {
+                        writer.WriteLine();
+                        writer.WriteLine($"modelBuilder.Entity<{model.ClassName}>(entity =>");
+                        writer.WriteLine("{");
+                        writer.Indent++;
+                        foreach (
+                            var property in model.Properties.Where(p =>
+                                p.Kind != ProviderExtensions.NestedKind.None
+                            )
+                        )
+                        {
+                            InsertOwnedConfiguration(writer, "entity", property, 1);
+                        }
+                        writer.Indent--;
+                        writer.WriteLine("});");
+                    }
+
+                    writer.Indent--;
+                    writer.WriteLine("}");
                 }
 
                 writer.Indent--;

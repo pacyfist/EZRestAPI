@@ -17,7 +17,7 @@ public class RepositoryGenerator : IIncrementalGenerator
     {
         var methodParameters = string.Join(
             ", ",
-            model.Properties.Select(p => $"{p.TypeName} {p.PropertyName.ToCamelCase()}")
+            model.Properties.Select(p => $"{p.DtoTypeName} {p.PropertyName.ToCamelCase()}")
         );
 
         writer.WriteLine(
@@ -30,7 +30,9 @@ public class RepositoryGenerator : IIncrementalGenerator
         writer.Indent++;
         foreach (var property in model.Properties)
         {
-            writer.WriteLine($"{property.PropertyName} = {property.PropertyName.ToCamelCase()},");
+            writer.WriteLine(
+                $"{property.PropertyName} = {property.ToEntityExpression(property.PropertyName.ToCamelCase())},"
+            );
         }
         writer.Indent--;
         writer.WriteLine("};");
@@ -47,11 +49,11 @@ public class RepositoryGenerator : IIncrementalGenerator
     {
         var tupleDefinition = string.Join(
             ", ",
-            model.Properties.Select(p => $"{p.TypeName} {p.PropertyName}")
+            model.Properties.Select(p => $"{p.DtoTypeName} {p.PropertyName}")
         );
         var tupleValues = string.Join(
             ", ",
-            model.Properties.Select(p => $"entity.{p.PropertyName}")
+            model.Properties.Select(p => p.ToDtoExpression($"entity.{p.PropertyName}"))
         );
 
         writer.WriteLine(
@@ -82,7 +84,7 @@ public class RepositoryGenerator : IIncrementalGenerator
     {
         var methodParameters = string.Join(
             ", ",
-            model.Properties.Select(p => $"{p.TypeName} {p.PropertyName.ToCamelCase()}")
+            model.Properties.Select(p => $"{p.DtoTypeName} {p.PropertyName.ToCamelCase()}")
         );
 
         writer.WriteLine(
@@ -104,7 +106,7 @@ public class RepositoryGenerator : IIncrementalGenerator
         foreach (var property in model.Properties)
         {
             writer.WriteLine(
-                $"entity.{property.PropertyName} = {property.PropertyName.ToCamelCase()};"
+                $"entity.{property.PropertyName} = {property.ToEntityExpression(property.PropertyName.ToCamelCase())};"
             );
         }
         writer.WriteLine();
@@ -144,6 +146,7 @@ public class RepositoryGenerator : IIncrementalGenerator
 
                 writer.WriteLine($"namespace {model.AssemblyName};");
                 writer.WriteLine();
+                writer.WriteLine("using System.Linq;");
                 writer.WriteLine("using Microsoft.EntityFrameworkCore;");
                 writer.WriteLine();
                 writer.WriteLine(
