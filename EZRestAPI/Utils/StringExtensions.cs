@@ -1,3 +1,5 @@
+namespace EZRestAPI.Utils;
+
 public static class StringExtensions
 {
     public static string ToCamelCase(this string value)
