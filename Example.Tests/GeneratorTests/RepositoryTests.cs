@@ -13,7 +13,7 @@ public class RepositoryTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        container = new MsSqlBuilder().Build();
+        container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04").Build();
         await container.StartAsync();
 
         var connectionString = container.GetConnectionString();
