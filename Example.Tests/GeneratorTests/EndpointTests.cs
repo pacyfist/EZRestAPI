@@ -96,6 +96,64 @@ public class EndpointTests : IAsyncLifetime
     }
 
     [Fact]
+    public async Task Post_NestedGraphCrudRoundTrip_OverHttp()
+    {
+        var createResponse = await client.PostAsJsonAsync(
+            "/posts",
+            new
+            {
+                Title = "Hello",
+                Comments = new List<CommentDto>
+                {
+                    new() { Text = "First", Reactions = [new() { Emoji = "+1" }] },
+                    new() { Text = "Second", Reactions = [] },
+                },
+            }
+        );
+        Assert.Equal(HttpStatusCode.Created, createResponse.StatusCode);
+
+        var created = await createResponse.Content.ReadFromJsonAsync<CreatePostResponse>();
+        Assert.NotNull(created);
+
+        var read = await client.GetFromJsonAsync<ReadPostResponse>($"/posts/{created.Id}");
+        Assert.NotNull(read);
+        Assert.Equal("Hello", read.Title);
+        Assert.Equal(2, read.Comments.Count);
+
+        var first = Assert.Single(read.Comments.Where(c => c.Text == "First"));
+        Assert.Equal("+1", Assert.Single(first.Reactions).Emoji);
+        Assert.Empty(Assert.Single(read.Comments.Where(c => c.Text == "Second")).Reactions);
+
+        var updateResponse = await client.PutAsJsonAsync(
+            $"/posts/{created.Id}",
+            new
+            {
+                Id = created.Id,
+                Title = "Hello2",
+                Comments = new List<CommentDto>
+                {
+                    new() { Text = "Replaced", Reactions = [new() { Emoji = "🎉" }] },
+                },
+            }
+        );
+        Assert.Equal(HttpStatusCode.NoContent, updateResponse.StatusCode);
+
+        var reread = await client.GetFromJsonAsync<ReadPostResponse>($"/posts/{created.Id}");
+        Assert.NotNull(reread);
+        Assert.Equal("Hello2", reread.Title);
+
+        var replaced = Assert.Single(reread.Comments);
+        Assert.Equal("Replaced", replaced.Text);
+        Assert.Equal("🎉", Assert.Single(replaced.Reactions).Emoji);
+
+        var deleteResponse = await client.DeleteAsync($"/posts/{created.Id}");
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        var notFound = await client.GetAsync($"/posts/{created.Id}");
+        Assert.Equal(HttpStatusCode.NotFound, notFound.StatusCode);
+    }
+
+    [Fact]
     public async Task SimpleData_MissingId_Returns404()
     {
         var read = await client.GetAsync("/simpledataplural/424242");
