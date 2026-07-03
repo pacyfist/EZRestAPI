@@ -85,7 +85,7 @@ public class RepositoryTests : IAsyncLifetime
             id: id,
             CancellationToken.None);
 
-        Assert.Equal("Test2", result.StringProperty);
+        Assert.Equal("Test2", result?.StringProperty);
 
         await service.DeleteAsync(
             id: id,

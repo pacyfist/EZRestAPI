@@ -10,7 +10,7 @@ using System.CodeDom.Compiler;
 [Generator(LanguageNames.CSharp)]
 public class RepositoryGenerator : IIncrementalGenerator
 {
-    public void InsertCreateMethod(ref IndentedTextWriter writer, ProviderExtensions.Model model)
+    private static void InsertCreateMethod(IndentedTextWriter writer, ProviderExtensions.Model model)
     {
         var methodParameters = string.Join(", ", model.Properties.Select(p => $"{p.TypeName} {p.PropertyName.ToCamelCase()}"));
 
@@ -35,29 +35,43 @@ public class RepositoryGenerator : IIncrementalGenerator
         writer.WriteLine("}");
     }
 
-    public void InsertReadMethod(ref IndentedTextWriter writer, ProviderExtensions.Model model)
+    private static void InsertReadMethod(IndentedTextWriter writer, ProviderExtensions.Model model)
     {
         var tupleDefinition = string.Join(", ", model.Properties.Select(p => $"{p.TypeName} {p.PropertyName}"));
         var tupleValues = string.Join(", ", model.Properties.Select(p => $"entity.{p.PropertyName}"));
 
-        writer.WriteLine($"public async Task<({tupleDefinition})> ReadAsync(int id, CancellationToken cancellationToken)");
+        writer.WriteLine($"public async Task<({tupleDefinition})?> ReadAsync(int id, CancellationToken cancellationToken)");
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine($"var entity = await context.{model.PluralName}.AsNoTracking().FirstAsync(s => s.Id == id, cancellationToken);");
+        writer.WriteLine($"var entity = await context.{model.PluralName}.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, cancellationToken);");
+        writer.WriteLine();
+        writer.WriteLine("if (entity is null)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("return null;");
+        writer.Indent--;
+        writer.WriteLine("}");
         writer.WriteLine();
         writer.WriteLine($"return ({tupleValues});");
         writer.Indent--;
         writer.WriteLine("}");
     }
 
-    public void InsertUpdateMethod(ref IndentedTextWriter writer, ProviderExtensions.Model model)
+    private static void InsertUpdateMethod(IndentedTextWriter writer, ProviderExtensions.Model model)
     {
         var methodParameters = string.Join(", ", model.Properties.Select(p => $"{p.TypeName} {p.PropertyName.ToCamelCase()}"));
 
-        writer.WriteLine($"public async Task UpdateAsync(int id, {methodParameters}, CancellationToken cancellationToken)");
+        writer.WriteLine($"public async Task<bool> UpdateAsync(int id, {methodParameters}, CancellationToken cancellationToken)");
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine($"var entity = await context.{model.PluralName}.FirstAsync(s => s.Id == id, cancellationToken);");
+        writer.WriteLine($"var entity = await context.{model.PluralName}.FirstOrDefaultAsync(s => s.Id == id, cancellationToken);");
+        writer.WriteLine();
+        writer.WriteLine("if (entity is null)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("return false;");
+        writer.Indent--;
+        writer.WriteLine("}");
         writer.WriteLine();
         foreach (var property in model.Properties)
         {
@@ -65,16 +79,18 @@ public class RepositoryGenerator : IIncrementalGenerator
         }
         writer.WriteLine();
         writer.WriteLine($"await context.SaveChangesAsync(cancellationToken);");
+        writer.WriteLine();
+        writer.WriteLine("return true;");
         writer.Indent--;
         writer.WriteLine("}");
     }
 
-    public void InsertDeleteMethod(ref IndentedTextWriter writer, ProviderExtensions.Model model)
+    private static void InsertDeleteMethod(IndentedTextWriter writer, ProviderExtensions.Model model)
     {
-        writer.WriteLine($"public async Task DeleteAsync(int id, CancellationToken cancellationToken)");
+        writer.WriteLine($"public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken)");
         writer.WriteLine("{");
         writer.Indent++;
-        writer.WriteLine($"await context.{model.PluralName}.Where(e => e.Id == id).ExecuteDeleteAsync(cancellationToken);");
+        writer.WriteLine($"return await context.{model.PluralName}.Where(e => e.Id == id).ExecuteDeleteAsync(cancellationToken) > 0;");
         writer.Indent--;
         writer.WriteLine("}");
     }
@@ -94,13 +110,13 @@ public class RepositoryGenerator : IIncrementalGenerator
             writer.WriteLine($"public partial class {model.SingularName}Repository(CustomDbContext context)");
             writer.WriteLine("{");
             writer.Indent++;
-            InsertCreateMethod(ref writer, model);
+            InsertCreateMethod(writer, model);
             writer.WriteLine();
-            InsertReadMethod(ref writer, model);
+            InsertReadMethod(writer, model);
             writer.WriteLine();
-            InsertUpdateMethod(ref writer, model);
+            InsertUpdateMethod(writer, model);
             writer.WriteLine();
-            InsertDeleteMethod(ref writer, model);
+            InsertDeleteMethod(writer, model);
             writer.Indent--;
             writer.WriteLine("}");
 
