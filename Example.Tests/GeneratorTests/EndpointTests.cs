@@ -120,9 +120,9 @@ public class EndpointTests : IAsyncLifetime
         Assert.Equal("Hello", read.Title);
         Assert.Equal(2, read.Comments.Count);
 
-        var first = Assert.Single(read.Comments.Where(c => c.Text == "First"));
+        var first = Assert.Single(read.Comments, c => c.Text == "First");
         Assert.Equal("+1", Assert.Single(first.Reactions).Emoji);
-        Assert.Empty(Assert.Single(read.Comments.Where(c => c.Text == "Second")).Reactions);
+        Assert.Empty(Assert.Single(read.Comments, c => c.Text == "Second").Reactions);
 
         var updateResponse = await client.PutAsJsonAsync(
             $"/posts/{created.Id}",
