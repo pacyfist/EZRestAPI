@@ -15,6 +15,11 @@ public class DbContextGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(modelsProvider, (ctx, models) =>
         {
+            if (models.IsDefaultOrEmpty)
+            {
+                return;
+            }
+
             var writer = new IndentedTextWriter(new StringWriter());
 
             writer.WriteLine($"namespace {models.First().AssemblyName};");
