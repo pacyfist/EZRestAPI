@@ -13,11 +13,10 @@ public readonly struct EquatableArray<T>(T[] items) : IEquatable<EquatableArray<
 
     public int Count => items?.Length ?? 0;
 
-    public bool Equals(EquatableArray<T> other)
-        => (items ?? []).AsEnumerable().SequenceEqual(other.items ?? []);
+    public bool Equals(EquatableArray<T> other) =>
+        (items ?? []).AsEnumerable().SequenceEqual(other.items ?? []);
 
-    public override bool Equals(object? obj)
-        => obj is EquatableArray<T> other && Equals(other);
+    public override bool Equals(object? obj) => obj is EquatableArray<T> other && Equals(other);
 
     public override int GetHashCode()
     {
@@ -25,7 +24,6 @@ public readonly struct EquatableArray<T>(T[] items) : IEquatable<EquatableArray<
         {
             return 0;
         }
-
         unchecked
         {
             var hash = 17;
@@ -38,9 +36,7 @@ public readonly struct EquatableArray<T>(T[] items) : IEquatable<EquatableArray<
         }
     }
 
-    public IEnumerator<T> GetEnumerator()
-        => ((IEnumerable<T>)(items ?? [])).GetEnumerator();
+    public IEnumerator<T> GetEnumerator() => ((IEnumerable<T>)(items ?? [])).GetEnumerator();
 
-    IEnumerator IEnumerable.GetEnumerator()
-        => GetEnumerator();
+    IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 }

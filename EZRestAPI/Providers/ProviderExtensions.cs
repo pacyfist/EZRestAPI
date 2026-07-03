@@ -1,9 +1,9 @@
 ﻿namespace EZRestAPI.Providers;
 
-using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
 using EZRestAPI.Utils;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 public static class ProviderExtensions
 {
@@ -14,13 +14,15 @@ public static class ProviderExtensions
         string ClassName,
         string SingularName,
         string PluralName,
-        EquatableArray<Property> Properties);
+        EquatableArray<Property> Properties
+    );
 
     public record Property(
         bool IsRequired,
         string TypeName,
         string PropertyName,
-        bool IsNonNullableReferenceType)
+        bool IsNonNullableReferenceType
+    )
     {
         /// <summary>
         /// True when a generated DTO property must carry the `required`
@@ -33,34 +35,43 @@ public static class ProviderExtensions
     {
         return provider.ForAttributeWithMetadataName(
             fullyQualifiedMetadataName: "EZRestAPI.ModelAttribute",
-            predicate: static (syntaxNode, cancellationToken) => syntaxNode is ClassDeclarationSyntax,
+            predicate: static (syntaxNode, cancellationToken) =>
+                syntaxNode is ClassDeclarationSyntax,
             transform: static (context, cancellationToken) =>
             {
                 var symbol = context.TargetSymbol;
                 var namedTypeSymbol = symbol as INamedTypeSymbol;
 
                 var attribute = context.Attributes.Single();
-                var singularName = attribute.ConstructorArguments[0].Value?.ToString() ?? "SingularNameNotSet";
-                var pluralName = attribute.ConstructorArguments[1].Value?.ToString() ?? "PluralNameNotSet";
+                var singularName =
+                    attribute.ConstructorArguments[0].Value?.ToString() ?? "SingularNameNotSet";
+                var pluralName =
+                    attribute.ConstructorArguments[1].Value?.ToString() ?? "PluralNameNotSet";
 
                 var properties = namedTypeSymbol?.GetMembers().OfType<IPropertySymbol>() ?? [];
 
                 return new Model(
                     AssemblyName: symbol.ContainingAssembly.Name,
-                    ModelNamespace: symbol.ContainingNamespace.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                    ModelNamespace: symbol.ContainingNamespace.ToDisplayString(
+                        SymbolDisplayFormat.FullyQualifiedFormat
+                    ),
                     ClassName: symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
                     ModelName: symbol.Name,
                     SingularName: singularName,
                     PluralName: pluralName,
-                    Properties: new EquatableArray<Property>(properties
-                        .Select(p => new Property(
-                            IsRequired: p.IsRequired,
-                            TypeName: p.Type.ToDisplayString(),
-                            PropertyName: p.Name,
-                            IsNonNullableReferenceType: p.Type.IsReferenceType
-                                && p.NullableAnnotation == NullableAnnotation.NotAnnotated))
-                        .ToArray())
-                    );
-            });
+                    Properties: new EquatableArray<Property>(
+                        properties
+                            .Select(p => new Property(
+                                IsRequired: p.IsRequired,
+                                TypeName: p.Type.ToDisplayString(),
+                                PropertyName: p.Name,
+                                IsNonNullableReferenceType: p.Type.IsReferenceType
+                                    && p.NullableAnnotation == NullableAnnotation.NotAnnotated
+                            ))
+                            .ToArray()
+                    )
+                );
+            }
+        );
     }
 }

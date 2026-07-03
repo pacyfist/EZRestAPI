@@ -9,7 +9,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 
 builder.Services.AddDbContextFactory<Example.CustomDbContext>(o =>
-    o.UseSqlServer(builder.Configuration.GetConnectionString("Example")));
+    o.UseSqlServer(builder.Configuration.GetConnectionString("Example"))
+);
 
 var app = builder.Build();
 
@@ -23,27 +24,35 @@ app.UseHttpsRedirection();
 
 var group = app.MapGroup("/simpledatamodels");
 
-group.MapPost("/", async (
-    [FromServices] SimpleDataRepository repository,
-    [FromBody] CreateSimpleDataRequest data,
-    CancellationToken cancellationToken) =>
-{
-    var id = await repository.CreateAsync(
-        integerProperty: data.IntegerProperty,
-        doubleProperty: data.DoubleProperty,
-        stringProperty: data.StringProperty,
-        dateTimeOffsetProperty: data.DateTimeOffsetProperty,
-        cancellationToken);
+group
+    .MapPost(
+        "/",
+        async (
+            [FromServices] SimpleDataRepository repository,
+            [FromBody] CreateSimpleDataRequest data,
+            CancellationToken cancellationToken
+        ) =>
+        {
+            var id = await repository.CreateAsync(
+                integerProperty: data.IntegerProperty,
+                doubleProperty: data.DoubleProperty,
+                stringProperty: data.StringProperty,
+                dateTimeOffsetProperty: data.DateTimeOffsetProperty,
+                cancellationToken
+            );
 
-    return Results.Ok(new CreateSimpleDataResponse()
-    {
-        Id = id,
-        IntegerProperty = data.IntegerProperty,
-        DoubleProperty = data.DoubleProperty,
-        StringProperty = data.StringProperty,
-        DateTimeOffsetProperty = data.DateTimeOffsetProperty
-    });
-})
-.WithName("CreateSimpleData");
+            return Results.Ok(
+                new CreateSimpleDataResponse()
+                {
+                    Id = id,
+                    IntegerProperty = data.IntegerProperty,
+                    DoubleProperty = data.DoubleProperty,
+                    StringProperty = data.StringProperty,
+                    DateTimeOffsetProperty = data.DateTimeOffsetProperty,
+                }
+            );
+        }
+    )
+    .WithName("CreateSimpleData");
 
 app.Run();

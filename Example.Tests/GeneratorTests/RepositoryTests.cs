@@ -13,7 +13,9 @@ public class RepositoryTests : IAsyncLifetime
 
     public async Task InitializeAsync()
     {
-        container = new MsSqlBuilder("mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04").Build();
+        container = new MsSqlBuilder(
+            "mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04"
+        ).Build();
         await container.StartAsync();
 
         var connectionString = container.GetConnectionString();
@@ -34,8 +36,6 @@ public class RepositoryTests : IAsyncLifetime
         await container.StopAsync();
     }
 
-
-
     [Fact]
     public async Task SimpleModel_CreateDelete_Counts()
     {
@@ -46,13 +46,12 @@ public class RepositoryTests : IAsyncLifetime
             doubleProperty: 1.1,
             stringProperty: "Test",
             dateTimeOffsetProperty: DateTimeOffset.Now,
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal(1, context.SimpleDataPlural.Count());
 
-        await service.DeleteAsync(
-            id: id,
-            CancellationToken.None);
+        await service.DeleteAsync(id: id, CancellationToken.None);
 
         Assert.Equal(0, context.SimpleDataPlural.Count());
     }
@@ -67,7 +66,8 @@ public class RepositoryTests : IAsyncLifetime
             doubleProperty: 1.1,
             stringProperty: "Test",
             dateTimeOffsetProperty: DateTimeOffset.Now,
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal("Test", context.SimpleDataPlural.First().StringProperty);
 
@@ -77,19 +77,16 @@ public class RepositoryTests : IAsyncLifetime
             doubleProperty: 2.2,
             stringProperty: "Test2",
             dateTimeOffsetProperty: DateTimeOffset.Now,
-            CancellationToken.None);
+            CancellationToken.None
+        );
 
         Assert.Equal("Test2", context.SimpleDataPlural.First().StringProperty);
 
-        var result = await service.ReadAsync(
-            id: id,
-            CancellationToken.None);
+        var result = await service.ReadAsync(id: id, CancellationToken.None);
 
         Assert.Equal("Test2", result?.StringProperty);
 
-        await service.DeleteAsync(
-            id: id,
-            CancellationToken.None);
+        await service.DeleteAsync(id: id, CancellationToken.None);
 
         Assert.Equal(0, context.SimpleDataPlural.Count());
     }

@@ -1,0 +1,17 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "c=$(jq -r '.tool_input.command // \"\"'); case \"$c\" in *\"git commit\"*) dotnet csharpier format . 2>/dev/null || true ;; esac",
+            "timeout": 120,
+            "statusMessage": "Running csharpier before commit..."
+          }
+        ]
+      }
+    ]
+  }
+}
