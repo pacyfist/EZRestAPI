@@ -40,11 +40,11 @@ You can then wire everything up in a minimal API:
 
 ```csharp
 builder.Services.AddDbContextFactory<CustomDbContext>(o =>
-    o.UseSqlServer(connectionString));
+    o.UseSqlServer(builder.Configuration.GetConnectionString("Example")));
 
 // ...
 
-group.MapGet("/create", async (
+group.MapPost("/", async (
     [FromServices] SimpleDataRepository repository,
     [FromBody] CreateSimpleDataRequest data,
     CancellationToken cancellationToken) =>
