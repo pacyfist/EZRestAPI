@@ -35,34 +35,32 @@ The attribute takes a singular name and a plural name, which are used to name th
 | `CreateSimpleDataResponse` | DTO for create responses (`Id` + all model properties) |
 | `ReadSimpleDataResponse` | DTO for read responses (nullable `Id` + all model properties) |
 | `UpdateSimpleDataRequest` | DTO for update requests (`Id` + all model properties) |
+| `SimpleDataEndpoints` | Minimal-API endpoints: CRUD routes under `/simpledataplural` |
+| `EZRestAPIExtensions` | `AddEZRestAPI()` (registers all repositories) and `MapEZRestAPI()` (maps all endpoints) |
 
-You can then wire everything up in a minimal API:
+Wiring up the whole API is then two calls:
 
 ```csharp
 builder.Services.AddDbContextFactory<CustomDbContext>(o =>
     o.UseSqlServer(builder.Configuration.GetConnectionString("Example")));
 
-// ...
+builder.Services.AddEZRestAPI();
 
-group.MapPost("/", async (
-    [FromServices] SimpleDataRepository repository,
-    [FromBody] CreateSimpleDataRequest data,
-    CancellationToken cancellationToken) =>
-{
-    var id = await repository.CreateAsync(
-        integerProperty: data.IntegerProperty,
-        doubleProperty: data.DoubleProperty,
-        stringProperty: data.StringProperty,
-        dateTimeOffsetProperty: data.DateTimeOffsetProperty,
-        cancellationToken);
+var app = builder.Build();
 
-    return Results.Ok(new CreateSimpleDataResponse()
-    {
-        Id = id,
-        // ...
-    });
-});
+app.MapEZRestAPI();
+
+app.Run();
 ```
+
+Which serves, for each model (plural name lowercased as the route):
+
+| Route | Verb | Response |
+|---|---|---|
+| `/simpledataplural` | POST | `201 Created` + response DTO |
+| `/simpledataplural/{id}` | GET | `200 OK` + response DTO, or `404` |
+| `/simpledataplural/{id}` | PUT | `204 No Content`, or `404` |
+| `/simpledataplural/{id}` | DELETE | `204 No Content`, or `404` |
 
 ## Solution structure
 
@@ -101,10 +99,15 @@ dotnet test
    - [x] Create request/response
    - [x] Read response
    - [x] Update request
-   - [ ] Delete request
-5. Controller / endpoints
-   - [ ] Generate REST endpoints
+5. REST endpoints
+   - [x] POST (create)
+   - [x] GET (read)
+   - [x] PUT (update)
+   - [x] DELETE (delete)
+6. Bootstrap
+   - [x] `AddEZRestAPI()` DI registration
+   - [x] `MapEZRestAPI()` route mapping
 
 ## Status
 
-This project is a work in progress — endpoint generation is not implemented yet, and the generated DTOs/repositories are still evolving.
+This project is a work in progress — the generated API shape (DTOs, routes, repository signatures) is still evolving.
