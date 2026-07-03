@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
 
 builder.Services.AddDbContextFactory<Example.CustomDbContext>(o =>
-    o.UseSqlServer("Server=localhost;Database=example;User=sa;Password=Password123;"));
+    o.UseSqlServer(builder.Configuration.GetConnectionString("Example")));
 
 var app = builder.Build();
 
@@ -23,9 +23,7 @@ app.UseHttpsRedirection();
 
 var group = app.MapGroup("/simpledatamodels");
 
-
-
-group.MapGet("/create", async (
+group.MapPost("/", async (
     [FromServices] SimpleDataRepository repository,
     [FromBody] CreateSimpleDataRequest data,
     CancellationToken cancellationToken) =>
@@ -46,12 +44,6 @@ group.MapGet("/create", async (
         DateTimeOffsetProperty = data.DateTimeOffsetProperty
     });
 })
-.WithName("GetWeatherForecast");
-
+.WithName("CreateSimpleData");
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
