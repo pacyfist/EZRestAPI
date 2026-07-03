@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using EZRestAPI.Utils;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 public static class ProviderExtensions
@@ -22,20 +23,24 @@ public static class ProviderExtensions
         string ClassName,
         string SingularName,
         string PluralName,
-        EquatableArray<Property> Properties
+        EquatableArray<Property> Properties,
+        bool IsPartial = true,
+        LocationInfo? Location = null
     );
 
     public record NestedModel(
         string AssemblyName,
         string ClassName,
         string SingularName,
-        EquatableArray<Property> Properties
+        EquatableArray<Property> Properties,
+        LocationInfo? Location = null
     );
 
     public record NestedType(
         string ClassName,
         string SingularName,
-        EquatableArray<Property> Properties
+        EquatableArray<Property> Properties,
+        bool IsCycle = false
     );
 
     public record Property(
@@ -44,9 +49,16 @@ public static class ProviderExtensions
         string PropertyName,
         bool IsNonNullableReferenceType,
         NestedKind Kind = NestedKind.None,
-        NestedType? Nested = null
+        NestedType? Nested = null,
+        bool IsModelReference = false
     )
     {
+        /// <summary>
+        /// True when this property (or its collection element) closes a
+        /// [Nested] containment cycle.
+        /// </summary>
+        public bool IsNestedCycle => Nested?.IsCycle == true;
+
         /// <summary>
         /// True when a generated DTO property must carry the `required`
         /// modifier to be valid under nullable reference types.
@@ -119,6 +131,10 @@ public static class ProviderExtensions
 
                 var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
+                var isPartial =
+                    context.TargetNode is ClassDeclarationSyntax classDeclaration
+                    && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
+
                 return new Model(
                     AssemblyName: symbol.ContainingAssembly.Name,
                     ModelNamespace: symbol.ContainingNamespace.ToDisplayString(
@@ -131,7 +147,9 @@ public static class ProviderExtensions
                     Properties: CollectProperties(
                         namedTypeSymbol,
                         ImmutableHashSet.Create(className)
-                    )
+                    ),
+                    IsPartial: isPartial,
+                    Location: LocationInfo.From(symbol.Locations.FirstOrDefault())
                 );
             }
         );
@@ -159,7 +177,8 @@ public static class ProviderExtensions
                     AssemblyName: symbol.ContainingAssembly.Name,
                     ClassName: className,
                     SingularName: singularName,
-                    Properties: CollectProperties(symbol, ImmutableHashSet.Create(className))
+                    Properties: CollectProperties(symbol, ImmutableHashSet.Create(className)),
+                    Location: LocationInfo.From(symbol.Locations.FirstOrDefault())
                 );
             }
         );
@@ -185,6 +204,15 @@ public static class ProviderExtensions
         var isNonNullableReferenceType =
             property.Type.IsReferenceType
             && property.NullableAnnotation == NullableAnnotation.NotAnnotated;
+
+        var isModelReference =
+            (property.Type is INamedTypeSymbol direct && HasModelAttribute(direct))
+            || (
+                property.Type
+                    is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } generic
+                && generic.TypeArguments[0] is INamedTypeSymbol genericElement
+                && HasModelAttribute(genericElement)
+            );
 
         if (
             property.Type
@@ -222,8 +250,16 @@ public static class ProviderExtensions
             IsRequired: property.IsRequired,
             TypeName: property.Type.ToDisplayString(),
             PropertyName: property.Name,
-            IsNonNullableReferenceType: isNonNullableReferenceType
+            IsNonNullableReferenceType: isNonNullableReferenceType,
+            IsModelReference: isModelReference
         );
+    }
+
+    private static bool HasModelAttribute(INamedTypeSymbol symbol)
+    {
+        return symbol
+            .GetAttributes()
+            .Any(a => a.AttributeClass?.ToDisplayString() == "EZRestAPI.ModelAttribute");
     }
 
     private static NestedType? TryCreateNestedType(
@@ -247,11 +283,21 @@ public static class ProviderExtensions
             attribute.ConstructorArguments[0].Value?.ToString() ?? "SingularNameNotSet";
 
         // Cycle guard: a type nested (directly or indirectly) inside itself is
-        // not expanded further.
-        var properties = visited.Contains(className)
-            ? new EquatableArray<Property>([])
-            : CollectProperties(symbol, visited.Add(className));
+        // not expanded further and is flagged for diagnostics.
+        if (visited.Contains(className))
+        {
+            return new NestedType(
+                className,
+                singularName,
+                new EquatableArray<Property>([]),
+                IsCycle: true
+            );
+        }
 
-        return new NestedType(className, singularName, properties);
+        return new NestedType(
+            className,
+            singularName,
+            CollectProperties(symbol, visited.Add(className))
+        );
     }
 }
