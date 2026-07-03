@@ -1,5 +1,4 @@
 using Example;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -8,9 +7,11 @@ var builder = WebApplication.CreateBuilder(args);
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
 builder.Services.AddOpenApi();
 
-builder.Services.AddDbContextFactory<Example.CustomDbContext>(o =>
+builder.Services.AddDbContextFactory<CustomDbContext>(o =>
     o.UseSqlServer(builder.Configuration.GetConnectionString("Example"))
 );
+
+builder.Services.AddEZRestAPI();
 
 var app = builder.Build();
 
@@ -22,37 +23,8 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var group = app.MapGroup("/simpledatamodels");
-
-group
-    .MapPost(
-        "/",
-        async (
-            [FromServices] SimpleDataRepository repository,
-            [FromBody] CreateSimpleDataRequest data,
-            CancellationToken cancellationToken
-        ) =>
-        {
-            var id = await repository.CreateAsync(
-                integerProperty: data.IntegerProperty,
-                doubleProperty: data.DoubleProperty,
-                stringProperty: data.StringProperty,
-                dateTimeOffsetProperty: data.DateTimeOffsetProperty,
-                cancellationToken
-            );
-
-            return Results.Ok(
-                new CreateSimpleDataResponse()
-                {
-                    Id = id,
-                    IntegerProperty = data.IntegerProperty,
-                    DoubleProperty = data.DoubleProperty,
-                    StringProperty = data.StringProperty,
-                    DateTimeOffsetProperty = data.DateTimeOffsetProperty,
-                }
-            );
-        }
-    )
-    .WithName("CreateSimpleData");
+app.MapEZRestAPI();
 
 app.Run();
+
+public partial class Program { }
