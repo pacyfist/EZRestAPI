@@ -10,26 +10,27 @@ snapshot tests and/or HTTP integration tests) and README updates.
 Fix everything that can produce broken generated code, and make misuse fail
 with clear diagnostics instead of cryptic errors in invisible files.
 
-- [ ] **Escape C# keywords in identifiers.** A property named `Event` generates
-      a parameter named `event` and fails to compile. `ToCamelCase` must emit
-      `@`-prefixed identifiers for reserved words.
-- [ ] **Replace the repository tuple API with generated read models.** A model
-      with one property generates `Task<(int Value)?>` — invalid C#; a model
-      with 22 properties generates an unusable tuple. `ReadAsync` should return
-      the generated `Read{Name}Response` (or a dedicated `{Name}ReadModel`),
-      and `CreateAsync`/`UpdateAsync` should accept the request DTOs instead of
-      one parameter per property. Breaking change — do it before anyone depends
-      on the current shape.
-- [ ] **Handle degenerate models.** Zero-property and one-property models must
-      generate valid code (fixed largely by the previous item).
-- [ ] **Analyzer diagnostics (`EZR0xx`)** reported at the user's code, for:
+- [x] **Escape C# keywords in identifiers.** A property named `Event` no longer
+      generates a parameter named `event`; `ToCamelCase` emits `@`-prefixed
+      identifiers for reserved words.
+- [x] **Replace the repository tuple API with generated read models.**
+      `ReadAsync` returns the generated `Read{Name}Response`, and
+      `CreateAsync`/`UpdateAsync` accept the request DTOs instead of one
+      parameter per property.
+- [x] **Handle degenerate models.** Zero-property and one-property models
+      generate valid code (covered by generator tests).
+- [x] **Analyzer diagnostics (`EZR001`–`EZR006`)** reported at the user's code:
       class not `partial`, duplicate singular/plural names across models,
       duplicate `[Nested]` names, a `[Model]` used as a navigation property
-      (must reference by id), `[Nested]` cycles, unsupported property types.
-- [ ] **Generator snapshot tests.** Add a unit-test project using
-      `Microsoft.CodeAnalysis.CSharp.SourceGenerators.Testing` / Verify so
-      generated output and diagnostics are asserted per scenario without a
-      database. The Testcontainers suite stays as the end-to-end layer.
+      (must reference by id), and `[Nested]` cycles. (A diagnostic for
+      unsupported property types is deferred — needs a careful definition of
+      "supported" to avoid false positives.)
+- [x] **Generator snapshot tests.** `EZRestAPI.Tests` runs every generator
+      in-memory via `CSharpGeneratorDriver` and asserts generated output and
+      diagnostics per scenario in ~1s, no database needed. The Testcontainers
+      suite stays as the end-to-end layer. Bonus catch: generated files now
+      carry their own `using` directives instead of silently requiring
+      `ImplicitUsings` in the consuming project.
 
 Exit criteria: no known input produces uncompilable output; every known misuse
 produces a targeted diagnostic; CI runs generator tests in seconds.
