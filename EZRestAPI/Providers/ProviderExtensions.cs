@@ -123,11 +123,9 @@ public static class ProviderExtensions
                 var symbol = context.TargetSymbol;
                 var namedTypeSymbol = symbol as INamedTypeSymbol;
 
-                var attribute = context.Attributes.Single();
-                var singularName =
-                    attribute.ConstructorArguments[0].Value?.ToString() ?? "SingularNameNotSet";
-                var pluralName =
-                    attribute.ConstructorArguments[1].Value?.ToString() ?? "PluralNameNotSet";
+                var attribute = context.Attributes.First();
+                var singularName = GetArgument(attribute, 0, "SingularNameNotSet");
+                var pluralName = GetArgument(attribute, 1, "PluralNameNotSet");
 
                 var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
@@ -167,9 +165,8 @@ public static class ProviderExtensions
             {
                 var symbol = (INamedTypeSymbol)context.TargetSymbol;
 
-                var attribute = context.Attributes.Single();
-                var singularName =
-                    attribute.ConstructorArguments[0].Value?.ToString() ?? "SingularNameNotSet";
+                var attribute = context.Attributes.First();
+                var singularName = GetArgument(attribute, 0, "SingularNameNotSet");
 
                 var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
@@ -184,12 +181,39 @@ public static class ProviderExtensions
         );
     }
 
+    /// <summary>
+    /// Reads an attribute constructor argument defensively: while the user is
+    /// still typing the attribute, arguments may be missing entirely, and a
+    /// transform that throws takes down every generator with CS8785.
+    /// </summary>
+    private static string GetArgument(AttributeData attribute, int index, string fallback)
+    {
+        return attribute.ConstructorArguments.Length > index
+            ? attribute.ConstructorArguments[index].Value?.ToString() ?? fallback
+            : fallback;
+    }
+
     private static EquatableArray<Property> CollectProperties(
         INamedTypeSymbol? typeSymbol,
         ImmutableHashSet<string> visited
     )
     {
-        var properties = typeSymbol?.GetMembers().OfType<IPropertySymbol>() ?? [];
+        // Only public, instance, readable AND writable, non-indexer properties
+        // participate in generation; anything else (computed properties,
+        // statics, indexers) cannot be round-tripped through DTOs.
+        var properties =
+            typeSymbol
+                ?.GetMembers()
+                .OfType<IPropertySymbol>()
+                .Where(p =>
+                    !p.IsStatic
+                    && !p.IsIndexer
+                    && !p.IsImplicitlyDeclared
+                    && p.GetMethod is not null
+                    && p.SetMethod is not null
+                    && p.DeclaredAccessibility == Accessibility.Public
+                )
+            ?? [];
 
         return new EquatableArray<Property>(
             properties.Select(p => CreateProperty(p, visited)).ToArray()
@@ -279,8 +303,7 @@ public static class ProviderExtensions
         }
 
         var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-        var singularName =
-            attribute.ConstructorArguments[0].Value?.ToString() ?? "SingularNameNotSet";
+        var singularName = GetArgument(attribute, 0, "SingularNameNotSet");
 
         // Cycle guard: a type nested (directly or indirectly) inside itself is
         // not expanded further and is flagged for diagnostics.

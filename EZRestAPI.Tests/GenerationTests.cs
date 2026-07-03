@@ -80,6 +80,61 @@ public class GenerationTests
     }
 
     [Fact]
+    public void IncompleteAttributeArguments_DoNotCrashGenerators()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model]
+            public partial class ThingModel
+            {
+                public required string Name { get; set; }
+            }
+            """
+        );
+
+        Assert.All(result.Results, r => Assert.Null(r.Exception));
+    }
+
+    [Fact]
+    public void ComputedStaticAndIndexerProperties_AreExcluded()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Person", "People")]
+            public partial class PersonModel
+            {
+                public required string First { get; set; }
+
+                public string DisplayName => First.ToUpperInvariant();
+
+                public static int InstanceCount { get; set; }
+
+                public string this[int index]
+                {
+                    get => First;
+                    set => First = value;
+                }
+
+                private int Secret { get; set; }
+            }
+            """
+        );
+
+        Assert.All(result.Results, r => Assert.Null(r.Exception));
+
+        var repository = GeneratorHarness.GetSource(result, "PersonRepository.g.cs");
+        Assert.DoesNotContain("DisplayName", repository);
+        Assert.DoesNotContain("InstanceCount", repository);
+        Assert.DoesNotContain("this[]", repository);
+        Assert.DoesNotContain("Secret", repository);
+        Assert.Contains("First = request.First", repository);
+    }
+
+    [Fact]
     public void NestedModel_GeneratesDtoMapperAndOwnedConfiguration()
     {
         var result = GeneratorHarness.Run(
