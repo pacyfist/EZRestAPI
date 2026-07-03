@@ -3,6 +3,7 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Linq;
+using EZRestAPI.Utils;
 
 public static class ProviderExtensions
 {
@@ -13,7 +14,7 @@ public static class ProviderExtensions
         string ClassName,
         string SingularName,
         string PluralName,
-        IEnumerable<Property> Properties);
+        EquatableArray<Property> Properties);
 
     public record Property(
         bool IsRequired,
@@ -43,11 +44,12 @@ public static class ProviderExtensions
                     ModelName: symbol.Name,
                     SingularName: singularName,
                     PluralName: pluralName,
-                    Properties: properties
+                    Properties: new EquatableArray<Property>(properties
                         .Select(p => new Property(
                             IsRequired: p.IsRequired,
                             TypeName: p.Type.ToDisplayString(),
                             PropertyName: p.Name))
+                        .ToArray())
                     );
             });
     }
