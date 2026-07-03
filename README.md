@@ -38,6 +38,46 @@ The attribute takes a singular name and a plural name, which are used to name th
 | `SimpleDataEndpoints` | Minimal-API endpoints: CRUD routes under `/simpledataplural` |
 | `EZRestAPIExtensions` | `AddEZRestAPI()` (registers all repositories) and `MapEZRestAPI()` (maps all endpoints) |
 
+## Nested models
+
+A model can contain other models — as a single object or a collection — to any depth. Mark aggregate parts with `[EZRestAPI.Nested]`:
+
+```csharp
+[EZRestAPI.Model("Post", "Posts")]
+public partial class PostModel
+{
+    [MaxLength(255)]
+    public required string Title { get; set; }
+
+    public required List<CommentModel> Comments { get; set; }
+}
+
+[EZRestAPI.Nested("Comment")]
+public class CommentModel
+{
+    [MaxLength(1024)]
+    public required string Text { get; set; }
+
+    public required List<ReactionModel> Reactions { get; set; }
+}
+
+[EZRestAPI.Nested("Reaction")]
+public class ReactionModel
+{
+    [MaxLength(16)]
+    public required string Emoji { get; set; }
+}
+```
+
+Nested classes are mapped as [EF Core owned entity types](https://learn.microsoft.com/en-us/ef/core/modeling/owned-entities) (`OwnsOne`/`OwnsMany`, configured in the generated `OnModelCreating`), and each generates a `{Name}Dto` plus a recursive entity/DTO mapper. The whole CRUD surface then works on the full graph:
+
+- **Create** — `POST /posts` accepts the nested JSON graph and inserts it in one transaction.
+- **Read** — `GET /posts/{id}` returns the graph (owned types are loaded automatically).
+- **Update** — `PUT /posts/{id}` replaces the nested content; removed children are deleted as orphans.
+- **Delete** — `DELETE /posts/{id}` cascades through all nested tables.
+
+Rules: a `[Nested]` class belongs to its owner (it gets no `DbSet`, repository, or endpoints of its own), the nesting must be tree-shaped (no cycles), and a `[Model]` should reference another `[Model]` by id, not by navigation property.
+
 Wiring up the whole API is then two calls:
 
 ```csharp
@@ -107,6 +147,10 @@ dotnet test
 6. Bootstrap
    - [x] `AddEZRestAPI()` DI registration
    - [x] `MapEZRestAPI()` route mapping
+7. Nested models
+   - [x] `[Nested]` aggregate parts as EF owned types
+   - [x] Nested DTOs + recursive mappers
+   - [x] Full-graph create/read/update/delete at any depth
 
 ## Status
 
