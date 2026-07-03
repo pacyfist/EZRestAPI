@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using EZRestAPI.Providers;
+using EZRestAPI.Utils;
 using System.CodeDom.Compiler;
 
 [Generator(LanguageNames.CSharp)]
@@ -23,7 +24,7 @@ public class DtoGenerator : IIncrementalGenerator
     {
         context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
         {
-            var writer = new IndentedTextWriter(new StringWriter());
+            var writer = SourceWriter.Create();
 
             writer.WriteLine($"namespace {model.AssemblyName};");
             writer.WriteLine();
@@ -32,7 +33,7 @@ public class DtoGenerator : IIncrementalGenerator
             writer.Indent++;
             foreach (var property in model.Properties)
             {
-                writer.WriteLine($"public {property.TypeName} {property.PropertyName} {{ get; set; }}");
+                writer.WriteLine($"public {(property.NeedsRequiredModifier ? "required " : "")}{property.TypeName} {property.PropertyName} {{ get; set; }}");
             }
             writer.Indent--;
             writer.WriteLine("}");
@@ -49,7 +50,7 @@ public class DtoGenerator : IIncrementalGenerator
     {
         context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
         {
-            var writer = new IndentedTextWriter(new StringWriter());
+            var writer = SourceWriter.Create();
 
             writer.WriteLine($"namespace {model.AssemblyName};");
             writer.WriteLine();
@@ -59,7 +60,7 @@ public class DtoGenerator : IIncrementalGenerator
             writer.WriteLine("public int Id { get; set; }");
             foreach (var property in model.Properties)
             {
-                writer.WriteLine($"public {property.TypeName} {property.PropertyName} {{ get; set; }}");
+                writer.WriteLine($"public {(property.NeedsRequiredModifier ? "required " : "")}{property.TypeName} {property.PropertyName} {{ get; set; }}");
             }
             writer.Indent--;
             writer.WriteLine("}");
@@ -76,7 +77,7 @@ public class DtoGenerator : IIncrementalGenerator
     {
         context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
         {
-            var writer = new IndentedTextWriter(new StringWriter());
+            var writer = SourceWriter.Create();
 
             writer.WriteLine($"namespace {model.AssemblyName};");
             writer.WriteLine();
@@ -86,7 +87,7 @@ public class DtoGenerator : IIncrementalGenerator
             writer.WriteLine("public int? Id { get; set; }");
             foreach (var property in model.Properties)
             {
-                writer.WriteLine($"public {property.TypeName} {property.PropertyName} {{ get; set; }}");
+                writer.WriteLine($"public {(property.NeedsRequiredModifier ? "required " : "")}{property.TypeName} {property.PropertyName} {{ get; set; }}");
             }
             writer.Indent--;
             writer.WriteLine("}");
@@ -103,7 +104,7 @@ public class DtoGenerator : IIncrementalGenerator
     {
         context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
         {
-            var writer = new IndentedTextWriter(new StringWriter());
+            var writer = SourceWriter.Create();
 
             writer.WriteLine($"namespace {model.AssemblyName};");
             writer.WriteLine();
@@ -113,7 +114,7 @@ public class DtoGenerator : IIncrementalGenerator
             writer.WriteLine("public int Id { get; set; }");
             foreach (var property in model.Properties)
             {
-                writer.WriteLine($"public {property.TypeName} {property.PropertyName} {{ get; set; }}");
+                writer.WriteLine($"public {(property.NeedsRequiredModifier ? "required " : "")}{property.TypeName} {property.PropertyName} {{ get; set; }}");
             }
             writer.Indent--;
             writer.WriteLine("}");

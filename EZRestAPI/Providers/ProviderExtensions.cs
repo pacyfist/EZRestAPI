@@ -19,7 +19,15 @@ public static class ProviderExtensions
     public record Property(
         bool IsRequired,
         string TypeName,
-        string PropertyName);
+        string PropertyName,
+        bool IsNonNullableReferenceType)
+    {
+        /// <summary>
+        /// True when a generated DTO property must carry the `required`
+        /// modifier to be valid under nullable reference types.
+        /// </summary>
+        public bool NeedsRequiredModifier => IsRequired || IsNonNullableReferenceType;
+    }
 
     public static IncrementalValuesProvider<Model> GetModels(this SyntaxValueProvider provider)
     {
@@ -48,7 +56,9 @@ public static class ProviderExtensions
                         .Select(p => new Property(
                             IsRequired: p.IsRequired,
                             TypeName: p.Type.ToDisplayString(),
-                            PropertyName: p.Name))
+                            PropertyName: p.Name,
+                            IsNonNullableReferenceType: p.Type.IsReferenceType
+                                && p.NullableAnnotation == NullableAnnotation.NotAnnotated))
                         .ToArray())
                     );
             });

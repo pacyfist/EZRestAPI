@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.Text;
 using EZRestAPI.Providers;
+using EZRestAPI.Utils;
 using System.CodeDom.Compiler;
 
 [Generator(LanguageNames.CSharp)]
@@ -84,7 +85,7 @@ public class RepositoryGenerator : IIncrementalGenerator
 
         context.RegisterSourceOutput(modelsProvider, (ctx, model) =>
         {
-            var writer = new IndentedTextWriter(new StringWriter());
+            var writer = SourceWriter.Create();
 
             writer.WriteLine($"namespace {model.AssemblyName};");
             writer.WriteLine();
