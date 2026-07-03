@@ -20,6 +20,8 @@ public class AttributesGenerator : IIncrementalGenerator
 
                     namespace EZRestAPI;
 
+                    using System;
+
                     [AttributeUsage(AttributeTargets.Class)]
                     public partial class ModelAttribute(string singularName, string pluralName)
                         : Attribute
@@ -41,6 +43,8 @@ public class AttributesGenerator : IIncrementalGenerator
                     #nullable enable
 
                     namespace EZRestAPI;
+
+                    using System;
 
                     [AttributeUsage(AttributeTargets.Class)]
                     public partial class NestedAttribute(string singularName)

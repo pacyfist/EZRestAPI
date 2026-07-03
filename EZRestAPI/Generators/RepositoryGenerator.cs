@@ -139,6 +139,8 @@ public class RepositoryGenerator : IIncrementalGenerator
                 writer.WriteLine($"namespace {model.AssemblyName};");
                 writer.WriteLine();
                 writer.WriteLine("using System.Linq;");
+                writer.WriteLine("using System.Threading;");
+                writer.WriteLine("using System.Threading.Tasks;");
                 writer.WriteLine("using Microsoft.EntityFrameworkCore;");
                 writer.WriteLine();
                 writer.WriteLine(

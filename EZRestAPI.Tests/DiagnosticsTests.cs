@@ -1,0 +1,170 @@
+namespace EZRestAPI.Tests;
+
+public class DiagnosticsTests
+{
+    [Fact]
+    public void ValidModel_ReportsNoDiagnostics()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Thing", "Things")]
+            public partial class ThingModel
+            {
+                public required string Name { get; set; }
+            }
+            """
+        );
+
+        Assert.Empty(GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void NotPartialModel_ReportsEZR001()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Thing", "Things")]
+            public class ThingModel
+            {
+                public required string Name { get; set; }
+            }
+            """
+        );
+
+        Assert.Contains("EZR001", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void DuplicateSingularName_ReportsEZR002()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Thing", "Things")]
+            public partial class ThingModel
+            {
+                public required string Name { get; set; }
+            }
+
+            [EZRestAPI.Model("Thing", "OtherThings")]
+            public partial class OtherThingModel
+            {
+                public required string Name { get; set; }
+            }
+            """
+        );
+
+        Assert.Contains("EZR002", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void DuplicatePluralName_ReportsEZR003()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Thing", "Things")]
+            public partial class ThingModel
+            {
+                public required string Name { get; set; }
+            }
+
+            [EZRestAPI.Model("OtherThing", "Things")]
+            public partial class OtherThingModel
+            {
+                public required string Name { get; set; }
+            }
+            """
+        );
+
+        Assert.Contains("EZR003", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void ModelUsedAsNavigation_ReportsEZR004()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            using System.Collections.Generic;
+
+            [EZRestAPI.Model("Author", "Authors")]
+            public partial class AuthorModel
+            {
+                public required string Name { get; set; }
+            }
+
+            [EZRestAPI.Model("Book", "Books")]
+            public partial class BookModel
+            {
+                public required string Title { get; set; }
+
+                public required AuthorModel Author { get; set; }
+
+                public required List<AuthorModel> Reviewers { get; set; }
+            }
+            """
+        );
+
+        Assert.Contains("EZR004", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void NestedCycle_ReportsEZR005()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            using System.Collections.Generic;
+
+            [EZRestAPI.Model("Node", "Nodes")]
+            public partial class NodeModel
+            {
+                public required List<BranchModel> Branches { get; set; }
+            }
+
+            [EZRestAPI.Nested("Branch")]
+            public class BranchModel
+            {
+                public required string Name { get; set; }
+
+                public required List<BranchModel> Children { get; set; }
+            }
+            """
+        );
+
+        Assert.Contains("EZR005", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void DuplicateNestedName_ReportsEZR006()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Nested("Part")]
+            public class PartModel
+            {
+                public required string Name { get; set; }
+            }
+
+            [EZRestAPI.Nested("Part")]
+            public class OtherPartModel
+            {
+                public required string Name { get; set; }
+            }
+            """
+        );
+
+        Assert.Contains("EZR006", GeneratorHarness.DiagnosticIds(result));
+    }
+}

@@ -126,6 +126,7 @@ public class EndpointsGenerator : IIncrementalGenerator
 
                 writer.WriteLine($"namespace {model.AssemblyName};");
                 writer.WriteLine();
+                writer.WriteLine("using System.Threading;");
                 writer.WriteLine("using Microsoft.AspNetCore.Builder;");
                 writer.WriteLine("using Microsoft.AspNetCore.Http;");
                 writer.WriteLine("using Microsoft.AspNetCore.Mvc;");
