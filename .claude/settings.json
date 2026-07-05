@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "c=$(jq -r '.tool_input.command // \"\"'); case \"$c\" in *\"git commit\"*) dotnet csharpier format . 2>/dev/null || true ;; esac",
+            "command": "c=$(jq -r '.tool_input.command // \"\"'); case \"$c\" in *\"git commit\"*) dotnet tool restore >/dev/null 2>&1; dotnet csharpier format . && git diff --name-only --cached -z | xargs -0 -r git add -- || true ;; esac",
             "timeout": 120,
             "statusMessage": "Running csharpier before commit..."
           }

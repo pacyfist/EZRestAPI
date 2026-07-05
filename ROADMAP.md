@@ -10,9 +10,10 @@ snapshot tests and/or HTTP integration tests) and README updates.
 Fix everything that can produce broken generated code, and make misuse fail
 with clear diagnostics instead of cryptic errors in invisible files.
 
-- [x] **Escape C# keywords in identifiers.** A property named `Event` no longer
-      generates a parameter named `event`; `ToCamelCase` emits `@`-prefixed
-      identifiers for reserved words.
+- [x] **Escape C# keywords in identifiers.** Property names no longer become
+      generated identifiers at all (repositories consume DTOs and access
+      `request.{Property}`), and assembly names are sanitized into valid,
+      keyword-escaped namespaces via `ToValidNamespace`.
 - [x] **Replace the repository tuple API with generated read models.**
       `ReadAsync` returns the generated `Read{Name}Response`, and
       `CreateAsync`/`UpdateAsync` accept the request DTOs instead of one

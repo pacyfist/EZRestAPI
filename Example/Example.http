@@ -1,6 +1,47 @@
 @Example_HostAddress = http://localhost:5108
 
-GET {{Example_HostAddress}}/weatherforecast/
+# Create a simple data row
+POST {{Example_HostAddress}}/simpledataplural
+Content-Type: application/json
+
+{
+  "integerProperty": 1,
+  "doubleProperty": 1.1,
+  "stringProperty": "Test",
+  "dateTimeOffsetProperty": "2026-01-01T00:00:00+00:00"
+}
+
+###
+
+# Read it back (adjust the id)
+GET {{Example_HostAddress}}/simpledataplural/1
 Accept: application/json
+
+###
+
+# Create a post with a nested comment/reaction graph
+POST {{Example_HostAddress}}/posts
+Content-Type: application/json
+
+{
+  "title": "Hello",
+  "comments": [
+    {
+      "text": "First",
+      "reactions": [{ "emoji": "+1" }]
+    }
+  ]
+}
+
+###
+
+# Read the post graph back (adjust the id)
+GET {{Example_HostAddress}}/posts/1
+Accept: application/json
+
+###
+
+# Delete the post (adjust the id)
+DELETE {{Example_HostAddress}}/posts/1
 
 ###
