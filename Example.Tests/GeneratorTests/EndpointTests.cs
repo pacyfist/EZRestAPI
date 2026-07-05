@@ -4,46 +4,34 @@ using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
-using Testcontainers.MsSql;
 
-public class EndpointTests : IAsyncLifetime
+[Collection("MsSql")]
+public class EndpointTests : IDisposable
 {
-    private MsSqlContainer container = null!;
-    private WebApplicationFactory<Program> factory = null!;
-    private HttpClient client = null!;
+    private readonly WebApplicationFactory<Program> factory;
+    private readonly HttpClient client;
 
-    public async Task InitializeAsync()
+    public EndpointTests(MsSqlContainerFixture fixture)
     {
-        container = new MsSqlBuilder(
-            "mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04"
-        ).Build();
-        await container.StartAsync();
-
         factory = new WebApplicationFactory<Program>().WithWebHostBuilder(builder =>
             builder.ConfigureAppConfiguration(
                 (_, configuration) =>
                     configuration.AddInMemoryCollection(
                         new Dictionary<string, string?>
                         {
-                            ["ConnectionStrings:Example"] = container.GetConnectionString(),
+                            ["ConnectionStrings:Example"] = fixture.ConnectionString,
                         }
                     )
             )
         );
 
-        using var scope = factory.Services.CreateScope();
-        var context = scope.ServiceProvider.GetRequiredService<CustomDbContext>();
-        await context.Database.EnsureCreatedAsync();
-
         client = factory.CreateClient();
     }
 
-    public async Task DisposeAsync()
+    public void Dispose()
     {
         client.Dispose();
-        await factory.DisposeAsync();
-        await container.StopAsync();
+        factory.Dispose();
     }
 
     [Fact]

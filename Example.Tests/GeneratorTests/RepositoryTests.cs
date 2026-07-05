@@ -1,39 +1,23 @@
-﻿namespace Example.Tests;
+namespace Example.Tests;
 
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using Testcontainers.MsSql;
 
-public class RepositoryTests : IAsyncLifetime
+[Collection("MsSql")]
+public class RepositoryTests
 {
-    private MsSqlContainer container = null!;
+    private readonly CustomDbContext context;
+    private readonly SimpleDataRepository service;
 
-    private CustomDbContext context = null!;
-    private SimpleDataRepository service = null!;
-
-    public async Task InitializeAsync()
+    public RepositoryTests(MsSqlContainerFixture fixture)
     {
-        container = new MsSqlBuilder(
-            "mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04"
-        ).Build();
-        await container.StartAsync();
-
-        var connectionString = container.GetConnectionString();
-
         var serviceCollection = new ServiceCollection()
-            .AddDbContext<CustomDbContext>(o => o.UseSqlServer(connectionString))
+            .AddDbContext<CustomDbContext>(o => o.UseSqlServer(fixture.ConnectionString))
             .AddSingleton<SimpleDataRepository>();
         var serviceProvider = serviceCollection.BuildServiceProvider();
 
         context = serviceProvider.GetRequiredService<CustomDbContext>();
         service = serviceProvider.GetRequiredService<SimpleDataRepository>();
-
-        await context.Database.EnsureCreatedAsync();
-    }
-
-    public async Task DisposeAsync()
-    {
-        await container.StopAsync();
     }
 
     [Fact]
