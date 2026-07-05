@@ -100,8 +100,8 @@ public class DiagnosticsGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var modelsProvider = context.SyntaxProvider.GetModels().Collect();
-        var nestedProvider = context.SyntaxProvider.GetNestedModels().Collect();
+        var modelsProvider = context.SyntaxProvider.GetModelsWithDiagnostics().Collect();
+        var nestedProvider = context.SyntaxProvider.GetNestedModelsWithDiagnostics().Collect();
 
         context.RegisterSourceOutput(
             modelsProvider.Combine(nestedProvider),
@@ -109,11 +109,12 @@ public class DiagnosticsGenerator : IIncrementalGenerator
             {
                 var (models, nestedModels) = pair;
 
-                foreach (var model in models)
+                foreach (var entry in models)
                 {
-                    var location = model.Location?.ToLocation() ?? Location.None;
+                    var model = entry.Model;
+                    var location = entry.Location?.ToLocation() ?? Location.None;
 
-                    if (!model.IsPartial)
+                    if (!entry.IsPartial)
                     {
                         ctx.ReportDiagnostic(
                             Diagnostic.Create(ModelMustBePartial, location, model.ModelName)
@@ -137,9 +138,10 @@ public class DiagnosticsGenerator : IIncrementalGenerator
                     ReportPropertyDiagnostics(ctx, model.ModelName, location, model.Properties);
                 }
 
-                foreach (var nested in nestedModels)
+                foreach (var entry in nestedModels)
                 {
-                    var location = nested.Location?.ToLocation() ?? Location.None;
+                    var nested = entry.Nested;
+                    var location = entry.Location?.ToLocation() ?? Location.None;
 
                     ReportInvalidName(ctx, nested.SingularName, nested.ClassName, location);
                     ReportPropertyDiagnostics(ctx, nested.ClassName, location, nested.Properties);
@@ -147,14 +149,18 @@ public class DiagnosticsGenerator : IIncrementalGenerator
 
                 // A class carrying both attributes would get a DbSet AND an
                 // owned-type configuration, which EF rejects at runtime.
-                var nestedClassNames = new HashSet<string>(nestedModels.Select(n => n.ClassName));
-                foreach (var model in models.Where(m => nestedClassNames.Contains(m.ClassName)))
+                var nestedClassNames = new HashSet<string>(
+                    nestedModels.Select(n => n.Nested.ClassName)
+                );
+                foreach (
+                    var entry in models.Where(m => nestedClassNames.Contains(m.Model.ClassName))
+                )
                 {
                     ctx.ReportDiagnostic(
                         Diagnostic.Create(
                             ModelAndNested,
-                            model.Location?.ToLocation() ?? Location.None,
-                            model.ModelName
+                            entry.Location?.ToLocation() ?? Location.None,
+                            entry.Model.ModelName
                         )
                     );
                 }
@@ -162,17 +168,17 @@ public class DiagnosticsGenerator : IIncrementalGenerator
                 ReportDuplicates(
                     ctx,
                     DuplicateSingularName,
-                    models.Select(m => (m.SingularName, m.Location))
+                    models.Select(m => (m.Model.SingularName, m.Location))
                 );
                 ReportDuplicates(
                     ctx,
                     DuplicatePluralName,
-                    models.Select(m => (m.PluralName, m.Location))
+                    models.Select(m => (m.Model.PluralName, m.Location))
                 );
                 ReportDuplicates(
                     ctx,
                     DuplicateNestedName,
-                    nestedModels.Select(n => (n.SingularName, n.Location))
+                    nestedModels.Select(n => (n.Nested.SingularName, n.Location))
                 );
             }
         );

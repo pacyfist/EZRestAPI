@@ -38,18 +38,27 @@ public static class ProviderExtensions
         string SingularName,
         string PluralName,
         EquatableArray<Property> Properties,
-        bool IsPartial = true,
-        LocationInfo? Location = null,
         string? UserIdTypeName = null
     );
+
+    /// <summary>
+    /// Diagnostics-only view of a model. Locations change whenever text above
+    /// the class shifts, so they must never flow into the cached models the
+    /// code-generating pipelines consume.
+    /// </summary>
+    public record ModelDiagnostics(Model Model, bool IsPartial, LocationInfo? Location);
 
     public record NestedModel(
         string AssemblyName,
         string ClassName,
         string SingularName,
-        EquatableArray<Property> Properties,
-        LocationInfo? Location = null
+        EquatableArray<Property> Properties
     );
+
+    /// <summary>
+    /// Diagnostics-only view of a nested model; see <see cref="ModelDiagnostics"/>.
+    /// </summary>
+    public record NestedModelDiagnostics(NestedModel Nested, LocationInfo? Location);
 
     public record NestedType(
         string ClassName,
@@ -138,46 +147,69 @@ public static class ProviderExtensions
             fullyQualifiedMetadataName: ModelAttributeName,
             predicate: static (syntaxNode, cancellationToken) =>
                 syntaxNode is ClassDeclarationSyntax,
+            transform: static (context, cancellationToken) => CreateModel(context)
+        );
+    }
+
+    /// <summary>
+    /// Same as <see cref="GetModels"/> but wrapped with source locations and
+    /// syntax facts, for the diagnostics generator only.
+    /// </summary>
+    public static IncrementalValuesProvider<ModelDiagnostics> GetModelsWithDiagnostics(
+        this SyntaxValueProvider provider
+    )
+    {
+        return provider.ForAttributeWithMetadataName(
+            fullyQualifiedMetadataName: ModelAttributeName,
+            predicate: static (syntaxNode, cancellationToken) =>
+                syntaxNode is ClassDeclarationSyntax,
             transform: static (context, cancellationToken) =>
             {
-                var symbol = context.TargetSymbol;
-                var namedTypeSymbol = symbol as INamedTypeSymbol;
-
-                var attribute = context.Attributes.First();
-                var singularName = GetArgument(attribute, 0, "SingularNameNotSet");
-                var pluralName = GetArgument(attribute, 1, "PluralNameNotSet");
-
-                var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
-
                 var isPartial =
                     context.TargetNode is ClassDeclarationSyntax classDeclaration
                     && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
 
-                // A user-declared Id takes over from the generated key.
-                var userIdProperty = namedTypeSymbol
-                    ?.GetMembers("Id")
-                    .OfType<IPropertySymbol>()
-                    .FirstOrDefault(p => !p.IsStatic && !p.IsIndexer);
-
-                return new Model(
-                    AssemblyName: symbol.ContainingAssembly.Name.ToValidNamespace(),
-                    ModelNamespace: symbol.ContainingNamespace.ToDisplayString(
-                        SymbolDisplayFormat.FullyQualifiedFormat
-                    ),
-                    ClassName: className,
-                    ModelName: symbol.Name,
-                    SingularName: singularName,
-                    PluralName: pluralName,
-                    Properties: CollectProperties(
-                        namedTypeSymbol,
-                        ImmutableHashSet.Create(className),
-                        excludeId: true
-                    ),
-                    IsPartial: isPartial,
-                    Location: LocationInfo.From(symbol.Locations.FirstOrDefault()),
-                    UserIdTypeName: userIdProperty?.Type.ToDisplayString()
+                return new ModelDiagnostics(
+                    CreateModel(context),
+                    isPartial,
+                    LocationInfo.From(context.TargetSymbol.Locations.FirstOrDefault())
                 );
             }
+        );
+    }
+
+    private static Model CreateModel(GeneratorAttributeSyntaxContext context)
+    {
+        var symbol = context.TargetSymbol;
+        var namedTypeSymbol = symbol as INamedTypeSymbol;
+
+        var attribute = context.Attributes.First();
+        var singularName = GetArgument(attribute, 0, "SingularNameNotSet");
+        var pluralName = GetArgument(attribute, 1, "PluralNameNotSet");
+
+        var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        // A user-declared Id takes over from the generated key.
+        var userIdProperty = namedTypeSymbol
+            ?.GetMembers("Id")
+            .OfType<IPropertySymbol>()
+            .FirstOrDefault(p => !p.IsStatic && !p.IsIndexer);
+
+        return new Model(
+            AssemblyName: symbol.ContainingAssembly.Name.ToValidNamespace(),
+            ModelNamespace: symbol.ContainingNamespace.ToDisplayString(
+                SymbolDisplayFormat.FullyQualifiedFormat
+            ),
+            ClassName: className,
+            ModelName: symbol.Name,
+            SingularName: singularName,
+            PluralName: pluralName,
+            Properties: CollectProperties(
+                namedTypeSymbol,
+                ImmutableHashSet.Create(className),
+                excludeId: true
+            ),
+            UserIdTypeName: userIdProperty?.Type.ToDisplayString()
         );
     }
 
@@ -189,23 +221,44 @@ public static class ProviderExtensions
             fullyQualifiedMetadataName: NestedAttributeName,
             predicate: static (syntaxNode, cancellationToken) =>
                 syntaxNode is ClassDeclarationSyntax,
+            transform: static (context, cancellationToken) => CreateNestedModel(context)
+        );
+    }
+
+    /// <summary>
+    /// Same as <see cref="GetNestedModels"/> but wrapped with source
+    /// locations, for the diagnostics generator only.
+    /// </summary>
+    public static IncrementalValuesProvider<NestedModelDiagnostics> GetNestedModelsWithDiagnostics(
+        this SyntaxValueProvider provider
+    )
+    {
+        return provider.ForAttributeWithMetadataName(
+            fullyQualifiedMetadataName: NestedAttributeName,
+            predicate: static (syntaxNode, cancellationToken) =>
+                syntaxNode is ClassDeclarationSyntax,
             transform: static (context, cancellationToken) =>
-            {
-                var symbol = (INamedTypeSymbol)context.TargetSymbol;
+                new NestedModelDiagnostics(
+                    CreateNestedModel(context),
+                    LocationInfo.From(context.TargetSymbol.Locations.FirstOrDefault())
+                )
+        );
+    }
 
-                var attribute = context.Attributes.First();
-                var singularName = GetArgument(attribute, 0, "SingularNameNotSet");
+    private static NestedModel CreateNestedModel(GeneratorAttributeSyntaxContext context)
+    {
+        var symbol = (INamedTypeSymbol)context.TargetSymbol;
 
-                var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var attribute = context.Attributes.First();
+        var singularName = GetArgument(attribute, 0, "SingularNameNotSet");
 
-                return new NestedModel(
-                    AssemblyName: symbol.ContainingAssembly.Name.ToValidNamespace(),
-                    ClassName: className,
-                    SingularName: singularName,
-                    Properties: CollectProperties(symbol, ImmutableHashSet.Create(className)),
-                    Location: LocationInfo.From(symbol.Locations.FirstOrDefault())
-                );
-            }
+        var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+
+        return new NestedModel(
+            AssemblyName: symbol.ContainingAssembly.Name.ToValidNamespace(),
+            ClassName: className,
+            SingularName: singularName,
+            Properties: CollectProperties(symbol, ImmutableHashSet.Create(className))
         );
     }
 
