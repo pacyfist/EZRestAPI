@@ -1,5 +1,7 @@
 namespace EZRestAPI.Utils;
 
+using System.Text;
+
 public static class StringExtensions
 {
     private static readonly HashSet<string> ReservedKeywords =
@@ -84,29 +86,46 @@ public static class StringExtensions
     ];
 
     /// <summary>
-    /// Lowercases the first character; results that collide with a C#
-    /// reserved keyword are escaped with '@' so they stay valid identifiers.
+    /// Converts an arbitrary assembly name into a valid C# namespace:
+    /// characters illegal in identifiers become '_' (so "my-api" becomes
+    /// "my_api", matching the SDK's RootNamespace convention), segments that
+    /// start with a digit are prefixed with '_', and segments that collide
+    /// with a reserved keyword are '@'-escaped.
     /// </summary>
-    public static string ToCamelCase(this string value)
+    public static string ToValidNamespace(this string value)
     {
         if (string.IsNullOrEmpty(value))
         {
-            return value;
+            return "_";
         }
 
-        var camel = char.ToLowerInvariant(value[0]) + value.Substring(1);
+        var segments = value.Split('.').Select(SanitizeSegment);
 
-        return ReservedKeywords.Contains(camel) ? "@" + camel : camel;
+        return string.Join(".", segments);
     }
 
-    public static string ToPascalCase(this string value)
+    private static string SanitizeSegment(string segment)
     {
-        if (string.IsNullOrEmpty(value))
+        if (segment.Length == 0)
         {
-            return value;
+            return "_";
         }
 
-        return char.ToUpperInvariant(value[0]) + value.Substring(1);
+        var builder = new StringBuilder(segment.Length + 1);
+
+        foreach (var character in segment)
+        {
+            builder.Append(char.IsLetterOrDigit(character) || character == '_' ? character : '_');
+        }
+
+        if (char.IsDigit(builder[0]))
+        {
+            builder.Insert(0, '_');
+        }
+
+        var result = builder.ToString();
+
+        return ReservedKeywords.Contains(result) ? "@" + result : result;
     }
 
     public static string ToCleanNamespace(this string value)

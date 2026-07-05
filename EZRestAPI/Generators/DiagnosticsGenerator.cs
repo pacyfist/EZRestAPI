@@ -62,6 +62,42 @@ public class DiagnosticsGenerator : IIncrementalGenerator
         isEnabledByDefault: true
     );
 
+    public static readonly DiagnosticDescriptor UnsupportedIdType = new(
+        "EZR007",
+        "Unsupported Id property type",
+        "Class '{0}' declares an 'Id' property of type '{1}'; only 'int' keys are supported",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
+
+    public static readonly DiagnosticDescriptor NameNotValidIdentifier = new(
+        "EZR008",
+        "Name is not a valid identifier",
+        "The name '{0}' on class '{1}' is not a valid C# identifier; it is used to build generated type names",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
+
+    public static readonly DiagnosticDescriptor UnsupportedNestedShape = new(
+        "EZR009",
+        "Unsupported container for a nested model",
+        "Property '{0}' on '{1}' holds nested models in an unsupported container; use List<T>, IList<T> or ICollection<T>",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
+
+    public static readonly DiagnosticDescriptor ModelAndNested = new(
+        "EZR010",
+        "Class is both a model and a nested model",
+        "Class '{0}' is marked with both [EZRestAPI.Model] and [EZRestAPI.Nested]; a class must be one or the other",
+        Category,
+        DiagnosticSeverity.Error,
+        isEnabledByDefault: true
+    );
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModels().Collect();
@@ -84,16 +120,42 @@ public class DiagnosticsGenerator : IIncrementalGenerator
                         );
                     }
 
+                    if (model.UserIdTypeName is not null and not "int")
+                    {
+                        ctx.ReportDiagnostic(
+                            Diagnostic.Create(
+                                UnsupportedIdType,
+                                location,
+                                model.ModelName,
+                                model.UserIdTypeName
+                            )
+                        );
+                    }
+
+                    ReportInvalidName(ctx, model.SingularName, model.ModelName, location);
+                    ReportInvalidName(ctx, model.PluralName, model.ModelName, location);
                     ReportPropertyDiagnostics(ctx, model.ModelName, location, model.Properties);
                 }
 
                 foreach (var nested in nestedModels)
                 {
-                    ReportPropertyDiagnostics(
-                        ctx,
-                        nested.ClassName,
-                        nested.Location?.ToLocation() ?? Location.None,
-                        nested.Properties
+                    var location = nested.Location?.ToLocation() ?? Location.None;
+
+                    ReportInvalidName(ctx, nested.SingularName, nested.ClassName, location);
+                    ReportPropertyDiagnostics(ctx, nested.ClassName, location, nested.Properties);
+                }
+
+                // A class carrying both attributes would get a DbSet AND an
+                // owned-type configuration, which EF rejects at runtime.
+                var nestedClassNames = new HashSet<string>(nestedModels.Select(n => n.ClassName));
+                foreach (var model in models.Where(m => nestedClassNames.Contains(m.ClassName)))
+                {
+                    ctx.ReportDiagnostic(
+                        Diagnostic.Create(
+                            ModelAndNested,
+                            model.Location?.ToLocation() ?? Location.None,
+                            model.ModelName
+                        )
                     );
                 }
 
@@ -144,10 +206,37 @@ public class DiagnosticsGenerator : IIncrementalGenerator
                 );
             }
 
+            if (property.IsUnsupportedNestedShape)
+            {
+                ctx.ReportDiagnostic(
+                    Diagnostic.Create(
+                        UnsupportedNestedShape,
+                        location,
+                        property.PropertyName,
+                        ownerName
+                    )
+                );
+            }
+
             if (property.Nested is { } nested)
             {
                 ReportPropertyDiagnostics(ctx, nested.ClassName, location, nested.Properties);
             }
+        }
+    }
+
+    private static void ReportInvalidName(
+        SourceProductionContext ctx,
+        string name,
+        string ownerName,
+        Location location
+    )
+    {
+        if (!Microsoft.CodeAnalysis.CSharp.SyntaxFacts.IsValidIdentifier(name))
+        {
+            ctx.ReportDiagnostic(
+                Diagnostic.Create(NameNotValidIdentifier, location, name, ownerName)
+            );
         }
     }
 
@@ -157,7 +246,13 @@ public class DiagnosticsGenerator : IIncrementalGenerator
         IEnumerable<(string Name, LocationInfo? Location)> entries
     )
     {
-        foreach (var duplicates in entries.GroupBy(e => e.Name).Where(group => group.Count() > 1))
+        // Case-insensitive: routes are lowercased plural names, so names
+        // differing only by case still collide at the HTTP level.
+        foreach (
+            var duplicates in entries
+                .GroupBy(e => e.Name, StringComparer.OrdinalIgnoreCase)
+                .Where(group => group.Count() > 1)
+        )
         {
             foreach (var entry in duplicates)
             {

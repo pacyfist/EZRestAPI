@@ -18,6 +18,13 @@ public class ModelGenerator : IIncrementalGenerator
             modelsProvider,
             (ctx, model) =>
             {
+                // The user declared their own Id; nothing to add (EZR007
+                // enforces that it is an int).
+                if (model.UserIdTypeName is not null)
+                {
+                    return;
+                }
+
                 var writer = SourceWriter.Create();
 
                 writer.WriteLine($"namespace {model.ModelNamespace.ToCleanNamespace()};");

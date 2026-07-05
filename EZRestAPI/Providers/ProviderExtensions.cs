@@ -9,6 +9,20 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 public static class ProviderExtensions
 {
+    public const string ModelAttributeName = "EZRestAPI.ModelAttribute";
+    public const string NestedAttributeName = "EZRestAPI.NestedAttribute";
+
+    /// <summary>
+    /// Collection shapes supported for nested model properties: they must be
+    /// assignable from List&lt;T&gt; and usable as EF Core collection navigations.
+    /// </summary>
+    private static readonly string[] SupportedCollectionTypes =
+    [
+        "System.Collections.Generic.List<T>",
+        "System.Collections.Generic.IList<T>",
+        "System.Collections.Generic.ICollection<T>",
+    ];
+
     public enum NestedKind
     {
         None,
@@ -25,7 +39,8 @@ public static class ProviderExtensions
         string PluralName,
         EquatableArray<Property> Properties,
         bool IsPartial = true,
-        LocationInfo? Location = null
+        LocationInfo? Location = null,
+        string? UserIdTypeName = null
     );
 
     public record NestedModel(
@@ -50,7 +65,8 @@ public static class ProviderExtensions
         bool IsNonNullableReferenceType,
         NestedKind Kind = NestedKind.None,
         NestedType? Nested = null,
-        bool IsModelReference = false
+        bool IsModelReference = false,
+        bool IsUnsupportedNestedShape = false
     )
     {
         /// <summary>
@@ -75,7 +91,7 @@ public static class ProviderExtensions
                 NestedKind.Single =>
                     $"{Nested!.SingularName}Dto{(IsNonNullableReferenceType ? "" : "?")}",
                 NestedKind.Collection =>
-                    $"System.Collections.Generic.List<{Nested!.SingularName}Dto>",
+                    $"System.Collections.Generic.List<{Nested!.SingularName}Dto>{(IsNonNullableReferenceType ? "" : "?")}",
                 _ => TypeName,
             };
 
@@ -90,8 +106,10 @@ public static class ProviderExtensions
                     $"{Nested!.SingularName}Mapper.ToEntity({value})",
                 NestedKind.Single =>
                     $"{value} is null ? null : {Nested!.SingularName}Mapper.ToEntity({value})",
-                NestedKind.Collection =>
+                NestedKind.Collection when IsNonNullableReferenceType =>
                     $"{value}.Select({Nested!.SingularName}Mapper.ToEntity).ToList()",
+                NestedKind.Collection =>
+                    $"{value} is null ? null : {value}.Select({Nested!.SingularName}Mapper.ToEntity).ToList()",
                 _ => value,
             };
 
@@ -106,8 +124,10 @@ public static class ProviderExtensions
                     $"{Nested!.SingularName}Mapper.ToDto({value})",
                 NestedKind.Single =>
                     $"{value} is null ? null : {Nested!.SingularName}Mapper.ToDto({value})",
-                NestedKind.Collection =>
+                NestedKind.Collection when IsNonNullableReferenceType =>
                     $"{value}.Select({Nested!.SingularName}Mapper.ToDto).ToList()",
+                NestedKind.Collection =>
+                    $"{value} is null ? null : {value}.Select({Nested!.SingularName}Mapper.ToDto).ToList()",
                 _ => value,
             };
     }
@@ -115,7 +135,7 @@ public static class ProviderExtensions
     public static IncrementalValuesProvider<Model> GetModels(this SyntaxValueProvider provider)
     {
         return provider.ForAttributeWithMetadataName(
-            fullyQualifiedMetadataName: "EZRestAPI.ModelAttribute",
+            fullyQualifiedMetadataName: ModelAttributeName,
             predicate: static (syntaxNode, cancellationToken) =>
                 syntaxNode is ClassDeclarationSyntax,
             transform: static (context, cancellationToken) =>
@@ -133,8 +153,14 @@ public static class ProviderExtensions
                     context.TargetNode is ClassDeclarationSyntax classDeclaration
                     && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
 
+                // A user-declared Id takes over from the generated key.
+                var userIdProperty = namedTypeSymbol
+                    ?.GetMembers("Id")
+                    .OfType<IPropertySymbol>()
+                    .FirstOrDefault(p => !p.IsStatic && !p.IsIndexer);
+
                 return new Model(
-                    AssemblyName: symbol.ContainingAssembly.Name,
+                    AssemblyName: symbol.ContainingAssembly.Name.ToValidNamespace(),
                     ModelNamespace: symbol.ContainingNamespace.ToDisplayString(
                         SymbolDisplayFormat.FullyQualifiedFormat
                     ),
@@ -144,10 +170,12 @@ public static class ProviderExtensions
                     PluralName: pluralName,
                     Properties: CollectProperties(
                         namedTypeSymbol,
-                        ImmutableHashSet.Create(className)
+                        ImmutableHashSet.Create(className),
+                        excludeId: true
                     ),
                     IsPartial: isPartial,
-                    Location: LocationInfo.From(symbol.Locations.FirstOrDefault())
+                    Location: LocationInfo.From(symbol.Locations.FirstOrDefault()),
+                    UserIdTypeName: userIdProperty?.Type.ToDisplayString()
                 );
             }
         );
@@ -158,7 +186,7 @@ public static class ProviderExtensions
     )
     {
         return provider.ForAttributeWithMetadataName(
-            fullyQualifiedMetadataName: "EZRestAPI.NestedAttribute",
+            fullyQualifiedMetadataName: NestedAttributeName,
             predicate: static (syntaxNode, cancellationToken) =>
                 syntaxNode is ClassDeclarationSyntax,
             transform: static (context, cancellationToken) =>
@@ -171,7 +199,7 @@ public static class ProviderExtensions
                 var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
                 return new NestedModel(
-                    AssemblyName: symbol.ContainingAssembly.Name,
+                    AssemblyName: symbol.ContainingAssembly.Name.ToValidNamespace(),
                     ClassName: className,
                     SingularName: singularName,
                     Properties: CollectProperties(symbol, ImmutableHashSet.Create(className)),
@@ -195,7 +223,8 @@ public static class ProviderExtensions
 
     private static EquatableArray<Property> CollectProperties(
         INamedTypeSymbol? typeSymbol,
-        ImmutableHashSet<string> visited
+        ImmutableHashSet<string> visited,
+        bool excludeId = false
     )
     {
         // Only public, instance, readable AND writable, non-indexer properties
@@ -212,6 +241,7 @@ public static class ProviderExtensions
                     && p.GetMethod is not null
                     && p.SetMethod is not null
                     && p.DeclaredAccessibility == Accessibility.Public
+                    && !(excludeId && p.Name == "Id")
                 )
             ?? [];
 
@@ -229,36 +259,79 @@ public static class ProviderExtensions
             property.Type.IsReferenceType
             && property.NullableAnnotation == NullableAnnotation.NotAnnotated;
 
-        var isModelReference =
-            (property.Type is INamedTypeSymbol direct && HasModelAttribute(direct))
-            || (
-                property.Type
-                    is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } generic
-                && generic.TypeArguments[0] is INamedTypeSymbol genericElement
-                && HasModelAttribute(genericElement)
-            );
-
-        if (
-            property.Type
-                is INamedTypeSymbol { IsGenericType: true, TypeArguments.Length: 1 } collectionType
-            && collectionType.TypeArguments[0] is INamedTypeSymbol elementType
-            && TryCreateNestedType(elementType, visited) is { } collectionNested
-        )
-        {
-            return new Property(
+        Property Plain(bool isModelReference = false, bool isUnsupportedNestedShape = false) =>
+            new(
                 IsRequired: property.IsRequired,
                 TypeName: property.Type.ToDisplayString(),
                 PropertyName: property.Name,
                 IsNonNullableReferenceType: isNonNullableReferenceType,
-                Kind: NestedKind.Collection,
-                Nested: collectionNested
+                IsModelReference: isModelReference,
+                IsUnsupportedNestedShape: isUnsupportedNestedShape
             );
+
+        // Arrays of annotated types are not supported containers.
+        if (property.Type is IArrayTypeSymbol array)
+        {
+            if (array.ElementType is INamedTypeSymbol arrayElement)
+            {
+                if (HasAttribute(arrayElement, ModelAttributeName))
+                {
+                    return Plain(isModelReference: true);
+                }
+
+                if (HasAttribute(arrayElement, NestedAttributeName))
+                {
+                    return Plain(isUnsupportedNestedShape: true);
+                }
+            }
+
+            return Plain();
         }
 
-        if (
-            property.Type is INamedTypeSymbol namedType
-            && TryCreateNestedType(namedType, visited) is { } singleNested
-        )
+        if (property.Type is not INamedTypeSymbol namedType)
+        {
+            return Plain();
+        }
+
+        if (namedType.IsGenericType)
+        {
+            var annotatedArguments = namedType.TypeArguments.OfType<INamedTypeSymbol>().ToArray();
+
+            var nestedElement = annotatedArguments.FirstOrDefault(a =>
+                HasAttribute(a, NestedAttributeName)
+            );
+
+            if (nestedElement is not null)
+            {
+                if (
+                    namedType.TypeArguments.Length == 1
+                    && SupportedCollectionTypes.Contains(
+                        namedType.ConstructedFrom.ToDisplayString()
+                    )
+                )
+                {
+                    return new Property(
+                        IsRequired: property.IsRequired,
+                        TypeName: property.Type.ToDisplayString(),
+                        PropertyName: property.Name,
+                        IsNonNullableReferenceType: isNonNullableReferenceType,
+                        Kind: NestedKind.Collection,
+                        Nested: TryCreateNestedType(nestedElement, visited)
+                    );
+                }
+
+                return Plain(isUnsupportedNestedShape: true);
+            }
+
+            if (annotatedArguments.Any(a => HasAttribute(a, ModelAttributeName)))
+            {
+                return Plain(isModelReference: true);
+            }
+
+            return Plain();
+        }
+
+        if (TryCreateNestedType(namedType, visited) is { } singleNested)
         {
             return new Property(
                 IsRequired: property.IsRequired,
@@ -270,20 +343,14 @@ public static class ProviderExtensions
             );
         }
 
-        return new Property(
-            IsRequired: property.IsRequired,
-            TypeName: property.Type.ToDisplayString(),
-            PropertyName: property.Name,
-            IsNonNullableReferenceType: isNonNullableReferenceType,
-            IsModelReference: isModelReference
-        );
+        return Plain(isModelReference: HasAttribute(namedType, ModelAttributeName));
     }
 
-    private static bool HasModelAttribute(INamedTypeSymbol symbol)
+    private static bool HasAttribute(INamedTypeSymbol symbol, string attributeName)
     {
         return symbol
             .GetAttributes()
-            .Any(a => a.AttributeClass?.ToDisplayString() == "EZRestAPI.ModelAttribute");
+            .Any(a => a.AttributeClass?.ToDisplayString() == attributeName);
     }
 
     private static NestedType? TryCreateNestedType(
@@ -293,9 +360,7 @@ public static class ProviderExtensions
     {
         var attribute = symbol
             .GetAttributes()
-            .FirstOrDefault(a =>
-                a.AttributeClass?.ToDisplayString() == "EZRestAPI.NestedAttribute"
-            );
+            .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == NestedAttributeName);
 
         if (attribute is null)
         {

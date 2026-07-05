@@ -58,10 +58,6 @@ public class GenerationTests
     [Fact]
     public void KeywordNamedProperty_GeneratesCompilableIdentifiers()
     {
-        Assert.Equal("@event", "Event".ToCamelCase());
-        Assert.Equal("@class", "Class".ToCamelCase());
-        Assert.Equal("name", "Name".ToCamelCase());
-
         var result = GeneratorHarness.Run(
             """
             namespace Tests;
@@ -77,6 +73,101 @@ public class GenerationTests
         var repository = GeneratorHarness.GetSource(result, "MeetingRepository.g.cs");
 
         Assert.Contains("Event = request.Event", repository);
+    }
+
+    [Fact]
+    public void AssemblyNameWithInvalidCharacters_IsSanitizedIntoValidNamespace()
+    {
+        Assert.Equal("my_api", "my-api".ToValidNamespace());
+        Assert.Equal("My.Api_2", "My.Api 2".ToValidNamespace());
+        Assert.Equal("_3d.Engine", "3d.Engine".ToValidNamespace());
+        Assert.Equal("@event", "event".ToValidNamespace());
+        Assert.Equal("Example", "Example".ToValidNamespace());
+    }
+
+    [Fact]
+    public void UserDeclaredIntId_DoesNotDuplicateMembers()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Tag", "Tags")]
+            public partial class TagModel
+            {
+                public int Id { get; set; }
+
+                public required string Name { get; set; }
+            }
+            """
+        );
+
+        Assert.Empty(GeneratorHarness.DiagnosticIds(result));
+
+        // No generated partial re-declares Id...
+        Assert.DoesNotContain(
+            result.Results.SelectMany(r => r.GeneratedSources),
+            s => s.HintName == "TagModel.g.cs"
+        );
+
+        // ...and the DTOs carry exactly one Id.
+        var response = GeneratorHarness.GetSource(result, "CreateTagResponse.g.cs");
+        Assert.Equal(1, CountOccurrences(response, " Id "));
+    }
+
+    [Fact]
+    public void NullableNestedCollection_KeepsNullabilityAndGuards()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            using System.Collections.Generic;
+
+            [EZRestAPI.Model("Post", "Posts")]
+            public partial class PostModel
+            {
+                public required string Title { get; set; }
+
+                public List<CommentModel>? Comments { get; set; }
+            }
+
+            [EZRestAPI.Nested("Comment")]
+            public class CommentModel
+            {
+                public required string Text { get; set; }
+            }
+            """
+        );
+
+        Assert.Empty(GeneratorHarness.DiagnosticIds(result));
+
+        var request = GeneratorHarness.GetSource(result, "CreatePostRequest.g.cs");
+        Assert.Contains("System.Collections.Generic.List<CommentDto>? Comments", request);
+
+        var repository = GeneratorHarness.GetSource(result, "PostRepository.g.cs");
+        Assert.Contains(
+            "request.Comments is null ? null : request.Comments.Select(CommentMapper.ToEntity).ToList()",
+            repository
+        );
+        Assert.Contains(
+            "entity.Comments is null ? null : entity.Comments.Select(CommentMapper.ToDto).ToList()",
+            repository
+        );
+    }
+
+    private static int CountOccurrences(string text, string token)
+    {
+        var count = 0;
+        var index = 0;
+
+        while ((index = text.IndexOf(token, index, StringComparison.Ordinal)) >= 0)
+        {
+            count++;
+            index += token.Length;
+        }
+
+        return count;
     }
 
     [Fact]
