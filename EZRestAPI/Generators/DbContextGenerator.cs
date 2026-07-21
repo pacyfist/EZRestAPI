@@ -42,7 +42,7 @@ public class DbContextGenerator : IIncrementalGenerator
 
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
-        var modelsProvider = context.SyntaxProvider.GetModels().Collect();
+        var modelsProvider = context.SyntaxProvider.GetModelsWithRelationships().Collect();
 
         context.RegisterSourceOutput(
             modelsProvider,
@@ -83,7 +83,11 @@ public class DbContextGenerator : IIncrementalGenerator
                     .Where(m => m.Properties.Any(p => p.Kind != ProviderExtensions.NestedKind.None))
                     .ToList();
 
-                if (modelsWithNested.Count > 0)
+                var modelsWithRelationships = models
+                    .Where(m => m.ParentRelationships.Any())
+                    .ToList();
+
+                if (modelsWithNested.Count > 0 || modelsWithRelationships.Count > 0)
                 {
                     writer.WriteLine();
                     writer.WriteLine(
@@ -109,6 +113,21 @@ public class DbContextGenerator : IIncrementalGenerator
                         }
                         writer.Indent--;
                         writer.WriteLine("});");
+                    }
+
+                    foreach (var model in modelsWithRelationships)
+                    {
+                        foreach (var rel in model.ParentRelationships)
+                        {
+                            writer.WriteLine();
+                            writer.WriteLine($"modelBuilder.Entity<{model.ClassName}>()");
+                            writer.Indent++;
+                            writer.WriteLine($".HasOne<{rel.ParentClassName}>()");
+                            writer.WriteLine(".WithMany()");
+                            writer.WriteLine($".HasForeignKey(e => e.{rel.ForeignKeyPropertyName})");
+                            writer.WriteLine(".OnDelete(DeleteBehavior.Restrict);");
+                            writer.Indent--;
+                        }
                     }
 
                     writer.Indent--;

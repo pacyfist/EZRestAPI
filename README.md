@@ -102,6 +102,59 @@ Which serves, for each model (plural name lowercased as the route):
 | `/simpledataplural/{id}` | PUT | `204 No Content`, or `404` |
 | `/simpledataplural/{id}` | DELETE | `204 No Content`, or `404` |
 
+## Relationships between models
+
+Two top-level `[Model]`s become an association by naming convention: a property named `{Singular}Id` — where `{Singular}` is the singular name of another `[Model]` — is treated as a foreign key to that model. So a `Book` with `AuthorId` becomes a child of `Author`:
+
+```csharp
+[EZRestAPI.Model("Author", "Authors")]
+public partial class AuthorModel
+{
+    [MaxLength(255)]
+    public required string FirstName { get; set; }
+}
+
+[EZRestAPI.Model("Book", "Books")]
+public partial class BookModel
+{
+    [MaxLength(255)]
+    public required string Title { get; set; }
+
+    public required int AuthorId { get; set; }
+}
+```
+
+Detection rules:
+
+- The property name must be `{Singular}Id` and match an existing `[Model]`'s singular name.
+- The type must be `int` (required parent) or `int?` (optional parent). Any other type — for example a `Guid OrderId` with no `Order` model — stays a plain scalar and is never treated as a foreign key.
+- Mark the property `[EZRestAPI.Scalar]` to opt out and force plain-scalar treatment even when the name and type would otherwise match.
+- A `{X}Id` `int` property with no matching `[Model]` raises the `EZR011` **warning** (build still succeeds), steering you to create the model, fix the type, or add `[Scalar]`.
+
+Each foreign key produces a real EF Core relationship in `OnModelCreating` with `DeleteBehavior.Restrict`, and the generator emits both flat routes and parent-scoped nested routes (plural names lowercased):
+
+| Route | Verb | Behavior |
+|---|---|---|
+| `/books` | GET | Paginated list of all books |
+| `/books` | POST | Flat create; `AuthorId` supplied in the body |
+| `/books/{id}` | GET / PUT / DELETE | Flat item |
+| `/authors/{authorId}/books` | GET | Paginated list scoped to that author |
+| `/authors/{authorId}/books` | POST | Create under the author; foreign key comes from the route and is omitted from the body |
+| `/authors/{authorId}/books/{bookId}` | GET / PUT / DELETE | Scoped item (verifies the book belongs to the author) |
+
+Collections are paginated with `?page=` (1-based, default `1`) and `?pageSize=` (default `20`, capped at `100`; larger values are clamped, not rejected). `page < 1` or `pageSize < 1` returns `400`. The envelope is identical for flat and nested lists:
+
+```json
+{ "items": [ ... ], "totalCount": 57, "page": 1, "pageSize": 20 }
+```
+
+Status-code semantics:
+
+- **Scoped item** whose foreign key does not match the route parent → `404`.
+- **Nested POST** to a parent that does not exist → `404`.
+- **Flat POST / PUT** with a foreign key that references no existing parent → `409 Conflict`.
+- **DELETE parent that still has children** → `409 Conflict` (`RESTRICT`; the children are preserved, so reassign or delete them first). This differs from `[Nested]` owned types, which cascade.
+
 ## Solution structure
 
 | Project | Description |
@@ -151,6 +204,12 @@ dotnet test
    - [x] `[Nested]` aggregate parts as EF owned types
    - [x] Nested DTOs + recursive mappers
    - [x] Full-graph create/read/update/delete at any depth
+8. Relationships between models
+   - [x] `{Singular}Id` foreign keys by convention (`int`/`int?`), `[Scalar]` opt-out, `EZR011` warning
+   - [x] `DeleteBehavior.Restrict` relationship configuration
+   - [x] Flat + parent-scoped nested CRUD routes
+   - [x] Paginated `PagedResponse<T>` collections
+   - [x] `404`/`409` referential-integrity semantics
 
 ## Status
 

@@ -98,6 +98,15 @@ public class DiagnosticsGenerator : IIncrementalGenerator
         isEnabledByDefault: true
     );
 
+    public static readonly DiagnosticDescriptor UnresolvedForeignKey = new(
+        "EZR011",
+        "Foreign-key-shaped property has no matching model",
+        "Property '{0}' on '{1}' is named like a foreign key but no [EZRestAPI.Model] has singular name '{2}'; create that model, or mark the property [EZRestAPI.Scalar] to treat it as a plain value",
+        Category,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true
+    );
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModelsWithDiagnostics().Collect();
@@ -136,6 +145,62 @@ public class DiagnosticsGenerator : IIncrementalGenerator
                     ReportInvalidName(ctx, model.SingularName, model.ModelName, location);
                     ReportInvalidName(ctx, model.PluralName, model.ModelName, location);
                     ReportPropertyDiagnostics(ctx, model.ModelName, location, model.Properties);
+                }
+
+                var knownSingulars = new HashSet<string>(
+                    models.Select(m => m.Model.SingularName)
+                );
+
+                foreach (var entry in models)
+                {
+                    var model = entry.Model;
+                    var location = entry.Location?.ToLocation() ?? Location.None;
+
+                    foreach (var property in model.Properties)
+                    {
+                        if (
+                            property.Kind != ProviderExtensions.NestedKind.None
+                            || property.IsScalarOptOut
+                        )
+                        {
+                            continue;
+                        }
+
+                        if (property.TypeName != "int" && property.TypeName != "int?")
+                        {
+                            continue;
+                        }
+
+                        if (
+                            !property.PropertyName.EndsWith("Id")
+                            || property.PropertyName.Length <= 2
+                        )
+                        {
+                            continue;
+                        }
+
+                        var parentSingular = property.PropertyName.Substring(
+                            0,
+                            property.PropertyName.Length - 2
+                        );
+                        if (
+                            parentSingular == model.SingularName
+                            || knownSingulars.Contains(parentSingular)
+                        )
+                        {
+                            continue;
+                        }
+
+                        ctx.ReportDiagnostic(
+                            Diagnostic.Create(
+                                UnresolvedForeignKey,
+                                location,
+                                property.PropertyName,
+                                model.ModelName,
+                                parentSingular
+                            )
+                        );
+                    }
                 }
 
                 foreach (var entry in nestedModels)

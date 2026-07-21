@@ -304,4 +304,84 @@ public class DiagnosticsTests
 
         Assert.Contains("EZR006", GeneratorHarness.DiagnosticIds(result));
     }
+
+    [Fact]
+    public void ForeignKeyShapedWithoutMatchingModel_ReportsEZR011()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Book", "Books")]
+            public partial class BookModel
+            {
+                public required string Title { get; set; }
+                public required int PublisherId { get; set; }
+            }
+            """
+        );
+
+        Assert.Contains("EZR011", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void GuidIdWithoutModel_DoesNotReportEZR011()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Author", "Authors")]
+            public partial class AuthorModel
+            {
+                public required string Name { get; set; }
+                public System.Guid OrderId { get; set; }
+            }
+            """
+        );
+
+        Assert.DoesNotContain("EZR011", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void ResolvedForeignKey_DoesNotReportEZR011()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Author", "Authors")]
+            public partial class AuthorModel { public required string Name { get; set; } }
+
+            [EZRestAPI.Model("Book", "Books")]
+            public partial class BookModel
+            {
+                public required string Title { get; set; }
+                public required int AuthorId { get; set; }
+            }
+            """
+        );
+
+        Assert.DoesNotContain("EZR011", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void ScalarOptOutForeignKeyShape_DoesNotReportEZR011()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Book", "Books")]
+            public partial class BookModel
+            {
+                public required string Title { get; set; }
+                [EZRestAPI.Scalar]
+                public required int PublisherId { get; set; }
+            }
+            """
+        );
+
+        Assert.DoesNotContain("EZR011", GeneratorHarness.DiagnosticIds(result));
+    }
 }

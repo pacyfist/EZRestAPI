@@ -15,3 +15,4 @@ EZR007 | EZRestAPI | Error | Unsupported Id property type
 EZR008 | EZRestAPI | Error | Name is not a valid identifier
 EZR009 | EZRestAPI | Error | Unsupported container for a nested model
 EZR010 | EZRestAPI | Error | Class is both a model and a nested model
+EZR011 | EZRestAPI | Warning | Foreign-key-shaped property has no matching model

@@ -11,6 +11,7 @@ public static class ProviderExtensions
 {
     public const string ModelAttributeName = "EZRestAPI.ModelAttribute";
     public const string NestedAttributeName = "EZRestAPI.NestedAttribute";
+    public const string ScalarAttributeName = "EZRestAPI.ScalarAttribute";
 
     /// <summary>
     /// Collection shapes supported for nested model properties: they must be
@@ -38,7 +39,20 @@ public static class ProviderExtensions
         string SingularName,
         string PluralName,
         EquatableArray<Property> Properties,
-        string? UserIdTypeName = null
+        string? UserIdTypeName = null,
+        EquatableArray<RelationshipInfo> ParentRelationships = default,
+        EquatableArray<RelationshipInfo> ChildRelationships = default
+    );
+
+    public record RelationshipInfo(
+        string ChildSingularName,
+        string ChildPluralName,
+        string ChildClassName,
+        string ParentSingularName,
+        string ParentPluralName,
+        string ParentClassName,
+        string ForeignKeyPropertyName,
+        bool IsNullable
     );
 
     /// <summary>
@@ -75,7 +89,8 @@ public static class ProviderExtensions
         NestedKind Kind = NestedKind.None,
         NestedType? Nested = null,
         bool IsModelReference = false,
-        bool IsUnsupportedNestedShape = false
+        bool IsUnsupportedNestedShape = false,
+        bool IsScalarOptOut = false
     )
     {
         /// <summary>
@@ -149,6 +164,101 @@ public static class ProviderExtensions
                 syntaxNode is ClassDeclarationSyntax,
             transform: static (context, cancellationToken) => CreateModel(context)
         );
+    }
+
+    public static IncrementalValuesProvider<Model> GetModelsWithRelationships(
+        this SyntaxValueProvider provider
+    )
+    {
+        return provider
+            .GetModels()
+            .Collect()
+            .SelectMany(static (models, _) => ResolveRelationships(models));
+    }
+
+    private static ImmutableArray<Model> ResolveRelationships(ImmutableArray<Model> models)
+    {
+        var bySingular = new System.Collections.Generic.Dictionary<string, Model>();
+        foreach (var m in models)
+        {
+            bySingular[m.SingularName] = m;
+        }
+
+        // First pass: each model's own foreign keys (edges to its parents).
+        var parentEdges =
+            new System.Collections.Generic.Dictionary<
+                string,
+                System.Collections.Generic.List<RelationshipInfo>
+            >();
+        var childEdges =
+            new System.Collections.Generic.Dictionary<
+                string,
+                System.Collections.Generic.List<RelationshipInfo>
+            >();
+
+        foreach (var child in models)
+        {
+            foreach (var p in child.Properties)
+            {
+                if (p.Kind != NestedKind.None || p.IsScalarOptOut)
+                {
+                    continue;
+                }
+                if (p.TypeName != "int" && p.TypeName != "int?")
+                {
+                    continue;
+                }
+                if (!p.PropertyName.EndsWith("Id") || p.PropertyName.Length <= 2)
+                {
+                    continue;
+                }
+                var parentSingular = p.PropertyName.Substring(0, p.PropertyName.Length - 2);
+                if (parentSingular == child.SingularName)
+                {
+                    continue; // self-reference: out of scope this cycle
+                }
+                if (!bySingular.TryGetValue(parentSingular, out var parent))
+                {
+                    continue; // unresolved -> handled by EZR011, not here
+                }
+
+                var edge = new RelationshipInfo(
+                    ChildSingularName: child.SingularName,
+                    ChildPluralName: child.PluralName,
+                    ChildClassName: child.ClassName,
+                    ParentSingularName: parent.SingularName,
+                    ParentPluralName: parent.PluralName,
+                    ParentClassName: parent.ClassName,
+                    ForeignKeyPropertyName: p.PropertyName,
+                    IsNullable: p.TypeName == "int?"
+                );
+
+                (
+                    parentEdges.TryGetValue(child.SingularName, out var pe)
+                        ? pe
+                        : parentEdges[child.SingularName] = new()
+                ).Add(edge);
+                (
+                    childEdges.TryGetValue(parent.SingularName, out var ce)
+                        ? ce
+                        : childEdges[parent.SingularName] = new()
+                ).Add(edge);
+            }
+        }
+
+        return models
+            .Select(m =>
+                m with
+                {
+                    ParentRelationships = new EquatableArray<RelationshipInfo>(
+                        parentEdges.TryGetValue(m.SingularName, out var pe) ? pe.ToArray() : []
+                    ),
+                    ChildRelationships = new EquatableArray<RelationshipInfo>(
+                        childEdges.TryGetValue(m.SingularName, out var ce) ? ce.ToArray() : []
+                    ),
+                }
+            )
+            .ToImmutableArray();
     }
 
     /// <summary>
@@ -319,7 +429,10 @@ public static class ProviderExtensions
                 PropertyName: property.Name,
                 IsNonNullableReferenceType: isNonNullableReferenceType,
                 IsModelReference: isModelReference,
-                IsUnsupportedNestedShape: isUnsupportedNestedShape
+                IsUnsupportedNestedShape: isUnsupportedNestedShape,
+                IsScalarOptOut: property
+                    .GetAttributes()
+                    .Any(a => a.AttributeClass?.ToDisplayString() == ScalarAttributeName)
             );
 
         // Arrays of annotated types are not supported containers.
