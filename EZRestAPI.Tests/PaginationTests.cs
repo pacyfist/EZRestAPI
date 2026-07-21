@@ -44,8 +44,15 @@ public class PaginationTests
         var result = GeneratorHarness.Run(Source);
         var endpoints = GeneratorHarness.GetSource(result, "WidgetEndpoints.g.cs");
 
-        Assert.Contains("group.MapGet(\"/\", async (", endpoints);
+        Assert.Contains(
+            "group.MapGet(\"/\", async Task<Results<Ok<PagedResponse<ReadWidgetResponse>>, ProblemHttpResult>> (",
+            endpoints
+        );
         Assert.Contains("if (page < 1 || pageSize < 1)", endpoints);
+        Assert.Contains(
+            "return EZRestAPIProblems.Unprocessable(\"page and pageSize must be >= 1.\");",
+            endpoints
+        );
         Assert.Contains("pageSize = System.Math.Min(pageSize, 100);", endpoints);
     }
 }
