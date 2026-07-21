@@ -13,13 +13,8 @@ internal static class GeneratorHarness
         .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
         .ToArray();
 
-    /// <summary>
-    /// Runs all EZRestAPI generators against the given source and returns the
-    /// run result (generated sources + reported diagnostics).
-    /// </summary>
-    public static GeneratorDriverRunResult Run(string source)
-    {
-        var compilation = CSharpCompilation.Create(
+    private static CSharpCompilation CreateCompilation(string source) =>
+        CSharpCompilation.Create(
             "GeneratorTests",
             [CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Latest))],
             References,
@@ -29,6 +24,12 @@ internal static class GeneratorHarness
             )
         );
 
+    /// <summary>
+    /// Runs all EZRestAPI generators against the given source and returns the
+    /// run result (generated sources + reported diagnostics).
+    /// </summary>
+    public static GeneratorDriverRunResult Run(string source)
+    {
         IIncrementalGenerator[] generators =
         [
             new AttributesGenerator(),
@@ -46,7 +47,29 @@ internal static class GeneratorHarness
             generators.Select(GeneratorExtensions.AsSourceGenerator).ToArray()
         );
 
-        return driver.RunGenerators(compilation).GetRunResult();
+        return driver.RunGenerators(CreateCompilation(source)).GetRunResult();
+    }
+
+    /// <summary>
+    /// Runs the attributes generator plus a probe that dumps the resolved
+    /// <c>Aggregate</c> models to source, so tests can assert on the aggregate
+    /// provider before any aggregate codegen exists.
+    /// </summary>
+    public static string RunAggregateProbe(string source)
+    {
+        IIncrementalGenerator[] generators =
+        [
+            new AttributesGenerator(),
+            new AggregateProbeGenerator(),
+        ];
+
+        var driver = CSharpGeneratorDriver.Create(
+            generators.Select(GeneratorExtensions.AsSourceGenerator).ToArray()
+        );
+
+        var result = driver.RunGenerators(CreateCompilation(source)).GetRunResult();
+
+        return GetSource(result, "AggregateProbe.g.cs");
     }
 
     public static string GetSource(GeneratorDriverRunResult result, string hintName)

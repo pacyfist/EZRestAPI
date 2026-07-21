@@ -384,4 +384,87 @@ public class DiagnosticsTests
 
         Assert.DoesNotContain("EZR011", GeneratorHarness.DiagnosticIds(result));
     }
+
+    [Fact]
+    public void AggregateWithNoFactory_ReportsEZR012()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Aggregate("Order", "Orders")]
+            public partial class Order
+            {
+                private Order() { }
+
+                public string Status { get; private set; } = "";
+            }
+            """
+        );
+
+        Assert.Contains("EZR012", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void AggregateWithMultipleFactories_ReportsEZR012()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Aggregate("Order", "Orders")]
+            public partial class Order
+            {
+                [EZRestAPI.Factory]
+                public static Order Place() => new Order();
+
+                [EZRestAPI.Factory]
+                public static Order Draft() => new Order();
+            }
+            """
+        );
+
+        Assert.Contains("EZR012", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void AggregateWithExactlyOneFactory_DoesNotReportEZR012()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Aggregate("Order", "Orders")]
+            public partial class Order
+            {
+                [EZRestAPI.Factory]
+                public static Order Place() => new Order();
+            }
+            """
+        );
+
+        Assert.DoesNotContain("EZR012", GeneratorHarness.DiagnosticIds(result));
+    }
+
+    [Fact]
+    public void ModelAndAggregateOnSameClass_ReportsEZR010()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            [EZRestAPI.Model("Order", "Orders")]
+            [EZRestAPI.Aggregate("Order", "Orders")]
+            public partial class Order
+            {
+                [EZRestAPI.Factory]
+                public static Order Place() => new Order();
+
+                public required string Status { get; set; }
+            }
+            """
+        );
+
+        Assert.Contains("EZR010", GeneratorHarness.DiagnosticIds(result));
+    }
 }

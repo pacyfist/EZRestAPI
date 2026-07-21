@@ -12,6 +12,9 @@ public static class ProviderExtensions
     public const string ModelAttributeName = "EZRestAPI.ModelAttribute";
     public const string NestedAttributeName = "EZRestAPI.NestedAttribute";
     public const string ScalarAttributeName = "EZRestAPI.ScalarAttribute";
+    public const string AggregateAttributeName = "EZRestAPI.AggregateAttribute";
+    public const string FactoryAttributeName = "EZRestAPI.FactoryAttribute";
+    public const string CommandAttributeName = "EZRestAPI.CommandAttribute";
 
     /// <summary>
     /// Collection shapes supported for nested model properties: they must be
@@ -79,6 +82,82 @@ public static class ProviderExtensions
         string SingularName,
         EquatableArray<Property> Properties,
         bool IsCycle = false
+    );
+
+    /// <summary>
+    /// How an aggregate is constructed from generated code: either a public
+    /// static factory method (<c>Order.Place(customer)</c>) or a public
+    /// constructor (<c>new Order(customer)</c>). Both are invoked directly at
+    /// compile time — never via reflection.
+    /// </summary>
+    public enum FactoryKind
+    {
+        StaticMethod,
+        Constructor,
+    }
+
+    /// <summary>
+    /// A factory-method or command-method parameter. Value-object parameters
+    /// carry a resolved <see cref="NestedType"/> so downstream generators can
+    /// nest the VO's Dto exactly like a [Nested] property.
+    /// </summary>
+    public record Parameter(
+        string TypeName,
+        string ParameterName,
+        bool IsNonNullableReferenceType,
+        NestedKind Kind = NestedKind.None,
+        NestedType? Nested = null
+    );
+
+    /// <summary>
+    /// The single resolved creation entry point of an aggregate: its kind, the
+    /// method name (for a static factory) or containing type name (for a
+    /// constructor), and its parameters.
+    /// </summary>
+    public record FactoryInfo(
+        FactoryKind Kind,
+        string Name,
+        EquatableArray<Parameter> Parameters
+    );
+
+    /// <summary>
+    /// A guarded state-transition method marked [Command]. The route name is
+    /// the explicit override or the kebab-cased method name; the method name is
+    /// kept for the direct compile-time invocation.
+    /// </summary>
+    public record CommandInfo(
+        string RouteName,
+        string MethodName,
+        EquatableArray<Parameter> Parameters
+    );
+
+    /// <summary>
+    /// A DDD aggregate root. Reads use a distinct property-collection rule from
+    /// [Model]: every public-getter instance property participates regardless
+    /// of setter accessibility (get-only, private-set and init all included).
+    /// </summary>
+    public record Aggregate(
+        string AssemblyName,
+        string ModelNamespace,
+        string ModelName,
+        string ClassName,
+        string SingularName,
+        string PluralName,
+        EquatableArray<Property> Properties,
+        FactoryInfo? Factory,
+        EquatableArray<CommandInfo> Commands
+    );
+
+    /// <summary>
+    /// Diagnostics-only view of an aggregate: source location and the factory
+    /// entry-point count (EZR012 fires when it is not exactly one). Locations
+    /// and counts stay out of the cached <see cref="Aggregate"/> record.
+    /// </summary>
+    public record AggregateDiagnostics(
+        Aggregate Aggregate,
+        bool IsPartial,
+        int FactoryCount,
+        LocationInfo? Location
     );
 
     public record Property(
@@ -371,6 +450,295 @@ public static class ProviderExtensions
             SingularName: singularName,
             Properties: CollectProperties(symbol, ImmutableHashSet.Create(className))
         );
+    }
+
+    public static IncrementalValuesProvider<Aggregate> GetAggregates(
+        this SyntaxValueProvider provider
+    )
+    {
+        return provider.ForAttributeWithMetadataName(
+            fullyQualifiedMetadataName: AggregateAttributeName,
+            predicate: static (syntaxNode, cancellationToken) =>
+                syntaxNode is ClassDeclarationSyntax,
+            transform: static (context, cancellationToken) => CreateAggregate(context).Aggregate
+        );
+    }
+
+    /// <summary>
+    /// Same as <see cref="GetAggregates"/> but wrapped with source locations,
+    /// syntax facts and the factory entry-point count, for the diagnostics
+    /// generator only.
+    /// </summary>
+    public static IncrementalValuesProvider<AggregateDiagnostics> GetAggregatesWithDiagnostics(
+        this SyntaxValueProvider provider
+    )
+    {
+        return provider.ForAttributeWithMetadataName(
+            fullyQualifiedMetadataName: AggregateAttributeName,
+            predicate: static (syntaxNode, cancellationToken) =>
+                syntaxNode is ClassDeclarationSyntax,
+            transform: static (context, cancellationToken) =>
+            {
+                var isPartial =
+                    context.TargetNode is ClassDeclarationSyntax classDeclaration
+                    && classDeclaration.Modifiers.Any(m => m.IsKind(SyntaxKind.PartialKeyword));
+
+                var (aggregate, factoryCount) = CreateAggregate(context);
+
+                return new AggregateDiagnostics(
+                    aggregate,
+                    isPartial,
+                    factoryCount,
+                    LocationInfo.From(context.TargetSymbol.Locations.FirstOrDefault())
+                );
+            }
+        );
+    }
+
+    private static (Aggregate Aggregate, int FactoryCount) CreateAggregate(
+        GeneratorAttributeSyntaxContext context
+    )
+    {
+        var symbol = context.TargetSymbol;
+        var namedTypeSymbol = symbol as INamedTypeSymbol;
+
+        var attribute = context.Attributes.First();
+        var singularName = GetArgument(attribute, 0, "SingularNameNotSet");
+        var pluralName = GetArgument(attribute, 1, "PluralNameNotSet");
+
+        var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+        var visited = ImmutableHashSet.Create(className);
+
+        var (factory, factoryCount) = ResolveFactory(namedTypeSymbol, visited);
+
+        var aggregate = new Aggregate(
+            AssemblyName: symbol.ContainingAssembly.Name.ToValidNamespace(),
+            ModelNamespace: symbol.ContainingNamespace.ToDisplayString(
+                SymbolDisplayFormat.FullyQualifiedFormat
+            ),
+            ClassName: className,
+            ModelName: symbol.Name,
+            SingularName: singularName,
+            PluralName: pluralName,
+            Properties: CollectAggregateProperties(namedTypeSymbol, visited),
+            Factory: factory,
+            Commands: CollectCommands(namedTypeSymbol, visited)
+        );
+
+        return (aggregate, factoryCount);
+    }
+
+    /// <summary>
+    /// Aggregate read rule (distinct from [Model]'s): every public-getter
+    /// instance property participates regardless of setter accessibility — so
+    /// get-only projections, { get; private set; } and { get; init; } are all
+    /// collected, where the [Model] rule (which requires a setter) drops them.
+    /// </summary>
+    private static EquatableArray<Property> CollectAggregateProperties(
+        INamedTypeSymbol? typeSymbol,
+        ImmutableHashSet<string> visited
+    )
+    {
+        var properties =
+            typeSymbol
+                ?.GetMembers()
+                .OfType<IPropertySymbol>()
+                .Where(p =>
+                    !p.IsStatic
+                    && !p.IsIndexer
+                    && !p.IsImplicitlyDeclared
+                    && p.GetMethod is not null
+                    && p.DeclaredAccessibility == Accessibility.Public
+                    && p.Name != "Id"
+                )
+            ?? [];
+
+        return new EquatableArray<Property>(
+            properties.Select(p => CreateProperty(p, visited)).ToArray()
+        );
+    }
+
+    private static (FactoryInfo? Factory, int Count) ResolveFactory(
+        INamedTypeSymbol? typeSymbol,
+        ImmutableHashSet<string> visited
+    )
+    {
+        if (typeSymbol is null)
+        {
+            return (null, 0);
+        }
+
+        var entryPoints = new System.Collections.Generic.List<FactoryInfo>();
+
+        foreach (var member in typeSymbol.GetMembers())
+        {
+            if (member is not IMethodSymbol method || !HasFactoryAttribute(method))
+            {
+                continue;
+            }
+
+            if (method.MethodKind == MethodKind.Constructor)
+            {
+                if (method.DeclaredAccessibility == Accessibility.Public)
+                {
+                    entryPoints.Add(
+                        new FactoryInfo(
+                            FactoryKind.Constructor,
+                            typeSymbol.Name,
+                            CollectParameters(method, visited)
+                        )
+                    );
+                }
+
+                continue;
+            }
+
+            // A public static method returning the aggregate type.
+            if (
+                method.MethodKind == MethodKind.Ordinary
+                && method.IsStatic
+                && method.DeclaredAccessibility == Accessibility.Public
+            )
+            {
+                entryPoints.Add(
+                    new FactoryInfo(
+                        FactoryKind.StaticMethod,
+                        method.Name,
+                        CollectParameters(method, visited)
+                    )
+                );
+            }
+        }
+
+        return (entryPoints.Count == 1 ? entryPoints[0] : null, entryPoints.Count);
+    }
+
+    private static EquatableArray<CommandInfo> CollectCommands(
+        INamedTypeSymbol? typeSymbol,
+        ImmutableHashSet<string> visited
+    )
+    {
+        if (typeSymbol is null)
+        {
+            return new EquatableArray<CommandInfo>([]);
+        }
+
+        var commands = new System.Collections.Generic.List<CommandInfo>();
+
+        foreach (var member in typeSymbol.GetMembers())
+        {
+            if (
+                member is not IMethodSymbol method
+                || method.MethodKind != MethodKind.Ordinary
+                || method.IsStatic
+                || method.DeclaredAccessibility != Accessibility.Public
+            )
+            {
+                continue;
+            }
+
+            var attribute = method
+                .GetAttributes()
+                .FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == CommandAttributeName);
+
+            if (attribute is null)
+            {
+                continue;
+            }
+
+            var overrideName =
+                attribute.ConstructorArguments.Length > 0
+                    ? attribute.ConstructorArguments[0].Value?.ToString()
+                    : null;
+
+            var routeName = string.IsNullOrEmpty(overrideName)
+                ? method.Name.ToKebabCase()
+                : overrideName!;
+
+            commands.Add(
+                new CommandInfo(routeName, method.Name, CollectParameters(method, visited))
+            );
+        }
+
+        return new EquatableArray<CommandInfo>(commands.ToArray());
+    }
+
+    private static EquatableArray<Parameter> CollectParameters(
+        IMethodSymbol method,
+        ImmutableHashSet<string> visited
+    )
+    {
+        return new EquatableArray<Parameter>(
+            method.Parameters.Select(p => CreateParameter(p, visited)).ToArray()
+        );
+    }
+
+    private static Parameter CreateParameter(
+        IParameterSymbol parameter,
+        ImmutableHashSet<string> visited
+    )
+    {
+        var isNonNullableReferenceType =
+            parameter.Type.IsReferenceType
+            && parameter.NullableAnnotation == NullableAnnotation.NotAnnotated;
+
+        var (kind, nested) = ResolveNested(parameter.Type, visited);
+
+        return new Parameter(
+            TypeName: parameter.Type.ToDisplayString(),
+            ParameterName: parameter.Name,
+            IsNonNullableReferenceType: isNonNullableReferenceType,
+            Kind: kind,
+            Nested: nested
+        );
+    }
+
+    /// <summary>
+    /// Resolves whether a type is a [Nested] value object (single) or a
+    /// supported collection of one, mirroring the [Model] property rule so
+    /// factory/command VO parameters nest their Dto the same way.
+    /// </summary>
+    private static (NestedKind Kind, NestedType? Nested) ResolveNested(
+        ITypeSymbol type,
+        ImmutableHashSet<string> visited
+    )
+    {
+        if (type is not INamedTypeSymbol namedType)
+        {
+            return (NestedKind.None, null);
+        }
+
+        if (namedType.IsGenericType)
+        {
+            var nestedElement = namedType
+                .TypeArguments.OfType<INamedTypeSymbol>()
+                .FirstOrDefault(a => HasAttribute(a, NestedAttributeName));
+
+            if (
+                nestedElement is not null
+                && namedType.TypeArguments.Length == 1
+                && SupportedCollectionTypes.Contains(namedType.ConstructedFrom.ToDisplayString())
+            )
+            {
+                return (NestedKind.Collection, TryCreateNestedType(nestedElement, visited));
+            }
+
+            return (NestedKind.None, null);
+        }
+
+        if (TryCreateNestedType(namedType, visited) is { } singleNested)
+        {
+            return (NestedKind.Single, singleNested);
+        }
+
+        return (NestedKind.None, null);
+    }
+
+    private static bool HasFactoryAttribute(IMethodSymbol method)
+    {
+        return method
+            .GetAttributes()
+            .Any(a => a.AttributeClass?.ToDisplayString() == FactoryAttributeName);
     }
 
     /// <summary>

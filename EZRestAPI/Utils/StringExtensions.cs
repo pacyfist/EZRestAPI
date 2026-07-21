@@ -128,6 +128,49 @@ public static class StringExtensions
         return ReservedKeywords.Contains(result) ? "@" + result : result;
     }
 
+    /// <summary>
+    /// Converts a PascalCase/camelCase method name into a kebab-case route
+    /// segment: "AddLine" becomes "add-line", "Cancel" becomes "cancel". Runs
+    /// of upper-case letters are collapsed so "AddSKU" becomes "add-sku".
+    /// </summary>
+    public static string ToKebabCase(this string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        var builder = new StringBuilder(value.Length + 4);
+
+        for (var i = 0; i < value.Length; i++)
+        {
+            var character = value[i];
+
+            if (char.IsUpper(character))
+            {
+                var previousIsLower = i > 0 && char.IsLower(value[i - 1]);
+                var previousIsUpperNextIsLower =
+                    i > 0
+                    && char.IsUpper(value[i - 1])
+                    && i + 1 < value.Length
+                    && char.IsLower(value[i + 1]);
+
+                if (i > 0 && (previousIsLower || previousIsUpperNextIsLower))
+                {
+                    builder.Append('-');
+                }
+
+                builder.Append(char.ToLowerInvariant(character));
+            }
+            else
+            {
+                builder.Append(character);
+            }
+        }
+
+        return builder.ToString();
+    }
+
     public static string ToCleanNamespace(this string value)
     {
         if (string.IsNullOrEmpty(value))
