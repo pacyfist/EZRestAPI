@@ -118,15 +118,20 @@ if (validationErrors is not null)
     {
         Status = StatusCodes.Status422UnprocessableEntity,
         Title = "One or more validation errors occurred.",
+        Detail = "One or more fields failed validation; see 'errors' for details.",
     };
+    problem.Extensions["code"] = "unprocessableEntity";
     return TypedResults.Problem(problem);
 }
 ```
 
 `TypedResults.ValidationProblem` is fixed at HTTP 400, so to emit **422** we
 build an `HttpValidationProblemDetails` (which carries the `errors` field-map),
-set `Status = 422`, and return it via `TypedResults.Problem(...)` — this yields
-`application/problem+json` with the RFC 9457 shape at status 422.
+set `Status = 422`, add the same `detail` + machine-readable `code` extension
+every other error body carries (§3), and return it via `TypedResults.Problem(...)`
+— `application/problem+json`, RFC 9457, status 422. In OpenAPI this response is
+documented with `.ProducesValidationProblem(422)` (not the bare
+`.ProducesProblem`) so the `errors` field-map appears in the generated schema.
 
 **Why reflection, not `AddValidation()`:** .NET 10's built-in minimal-API
 validation discovers validatable types with *its own* source generator. Roslyn

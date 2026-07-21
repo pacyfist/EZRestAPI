@@ -48,8 +48,13 @@ public class EndpointsGenerator : IIncrementalGenerator
             for (var i = 0; i < problemStatuses.Length; i++)
             {
                 var terminator = i == problemStatuses.Length - 1 ? ";" : "";
+                // 422 carries the validation `errors` field-map, so document it as
+                // a ValidationProblem (HttpValidationProblemDetails) rather than a
+                // bare ProblemDetails, so generated clients see the errors schema.
+                var producer =
+                    problemStatuses[i] == 422 ? "ProducesValidationProblem" : "ProducesProblem";
                 writer.WriteLine(
-                    $".ProducesProblem({StatusConst(problemStatuses[i])}, \"application/problem+json\"){terminator}"
+                    $".{producer}({StatusConst(problemStatuses[i])}, \"application/problem+json\"){terminator}"
                 );
             }
         }
@@ -75,8 +80,10 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.Indent++;
         writer.WriteLine("Status = StatusCodes.Status422UnprocessableEntity,");
         writer.WriteLine("Title = \"One or more validation errors occurred.\",");
+        writer.WriteLine("Detail = \"One or more fields failed validation; see 'errors' for details.\",");
         writer.Indent--;
         writer.WriteLine("};");
+        writer.WriteLine("problem.Extensions[\"code\"] = \"unprocessableEntity\";");
         writer.WriteLine("return TypedResults.Problem(problem);");
         writer.Indent--;
         writer.WriteLine("}");

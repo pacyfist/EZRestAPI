@@ -82,7 +82,7 @@ public class NestedEndpointTests
             endpoints
         );
         Assert.Contains(
-            ".ProducesProblem(StatusCodes.Status422UnprocessableEntity, \"application/problem+json\")",
+            ".ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity, \"application/problem+json\")",
             endpoints
         );
     }

@@ -165,7 +165,7 @@ public class EndpointContractTests
         // Update maps validation (422) + not-found (404); no conflict on an unrelated model.
         Assert.Contains(".WithName(\"UpdateTag\")", endpoints);
         Assert.Contains(
-            ".ProducesProblem(StatusCodes.Status422UnprocessableEntity, \"application/problem+json\")",
+            ".ProducesValidationProblem(StatusCodes.Status422UnprocessableEntity, \"application/problem+json\")",
             endpoints
         );
         Assert.Contains(

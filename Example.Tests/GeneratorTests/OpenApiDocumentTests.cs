@@ -54,11 +54,12 @@ public class OpenApiDocumentTests : IDisposable
         var root = document.RootElement;
         var paths = root.GetProperty("paths");
 
-        // POST /books -> 201 (created) and 422 (validation / bad body FK).
+        // POST /books -> 201 (created) and 422 (validation / bad body FK); the
+        // 422 body documents the RFC 9457 field-to-messages `errors` map.
         var createBook = Operation(paths, "/books", "post");
         var createResponses = createBook.GetProperty("responses");
         Assert.True(createResponses.TryGetProperty("201", out _));
-        AssertProblemResponse(createResponses, "422");
+        AssertValidationResponse(root, createResponses, "422");
 
         // DELETE /authors/{id} -> 409 (parent still has children).
         var deleteAuthor = Operation(paths, "/authors/{id}", "delete");
@@ -102,5 +103,34 @@ public class OpenApiDocumentTests : IDisposable
         );
         var reference = media.GetProperty("schema").GetProperty("$ref").GetString();
         Assert.Equal("#/components/schemas/ProblemDetails", reference);
+    }
+
+    /// <summary>
+    /// Asserts a validation error status exists, is application/problem+json, and
+    /// its schema (whether referenced or inline) documents the `errors` field-map
+    /// — so a generated client can type the per-field validation messages.
+    /// </summary>
+    private static void AssertValidationResponse(JsonElement root, JsonElement responses, string status)
+    {
+        Assert.True(responses.TryGetProperty(status, out var response), $"Missing {status} response.");
+        Assert.True(
+            response.GetProperty("content").TryGetProperty("application/problem+json", out var media),
+            $"{status} response is not application/problem+json."
+        );
+        var schema = media.GetProperty("schema");
+        string schemaText;
+        if (schema.TryGetProperty("$ref", out var reference))
+        {
+            var componentName = reference.GetString()!.Split('/')[^1];
+            schemaText = root.GetProperty("components")
+                .GetProperty("schemas")
+                .GetProperty(componentName)
+                .GetRawText();
+        }
+        else
+        {
+            schemaText = schema.GetRawText();
+        }
+        Assert.Contains("errors", schemaText);
     }
 }
