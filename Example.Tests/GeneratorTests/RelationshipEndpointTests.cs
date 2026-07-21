@@ -98,7 +98,11 @@ public class RelationshipEndpointTests : IDisposable
 
         var notFound = await client.GetAsync($"/books/{bookId}");
         Assert.Equal(HttpStatusCode.NotFound, notFound.StatusCode);
+        AssertProblemJson(notFound);
     }
+
+    private static void AssertProblemJson(HttpResponseMessage response) =>
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
 
     [Fact]
     public async Task NestedItem_WrongParent_Returns404()
@@ -117,6 +121,7 @@ public class RelationshipEndpointTests : IDisposable
 
         var response = await client.GetAsync($"/authors/{authorTwo}/books/{createdBook.Id}");
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        AssertProblemJson(response);
     }
 
     [Fact]
@@ -127,16 +132,39 @@ public class RelationshipEndpointTests : IDisposable
             new { Title = "Orphan" }
         );
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+        AssertProblemJson(response);
     }
 
     [Fact]
-    public async Task FlatPost_BadForeignKey_Returns409()
+    public async Task FlatPost_BadForeignKey_Returns422()
     {
+        // A body foreign key that references a missing parent is invalid content,
+        // not a state conflict: 422 (post-reconciliation, supersedes the old 409).
         var response = await client.PostAsJsonAsync(
             "/books",
             new { Title = "Orphan", AuthorId = 424242 }
         );
-        Assert.Equal(HttpStatusCode.Conflict, response.StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        AssertProblemJson(response);
+    }
+
+    [Fact]
+    public async Task FlatPost_InvalidTitle_Returns422WithErrorsMap()
+    {
+        var author = await CreateAuthorAsync("Validated");
+
+        var response = await client.PostAsJsonAsync(
+            "/books",
+            new { Title = new string('x', 300), AuthorId = author }
+        );
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        AssertProblemJson(response);
+
+        using var document = System.Text.Json.JsonDocument.Parse(
+            await response.Content.ReadAsStringAsync()
+        );
+        var errors = document.RootElement.GetProperty("errors");
+        Assert.True(errors.TryGetProperty("Title", out _));
     }
 
     [Fact]
@@ -152,15 +180,17 @@ public class RelationshipEndpointTests : IDisposable
 
         var deleteResponse = await client.DeleteAsync($"/authors/{authorId}");
         Assert.Equal(HttpStatusCode.Conflict, deleteResponse.StatusCode);
+        AssertProblemJson(deleteResponse);
 
         var stillThere = await client.GetAsync($"/authors/{authorId}");
         Assert.Equal(HttpStatusCode.OK, stillThere.StatusCode);
     }
 
     [Fact]
-    public async Task Pagination_BadPage_Returns400()
+    public async Task Pagination_BadPage_Returns422()
     {
         var response = await client.GetAsync("/books?page=0&pageSize=20");
-        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(HttpStatusCode.UnprocessableEntity, response.StatusCode);
+        AssertProblemJson(response);
     }
 }

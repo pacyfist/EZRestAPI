@@ -81,7 +81,11 @@ public class EndpointTests : IDisposable
 
         var notFound = await client.GetAsync($"/simpledataplural/{created.Id}");
         Assert.Equal(HttpStatusCode.NotFound, notFound.StatusCode);
+        AssertProblemJson(notFound);
     }
+
+    private static void AssertProblemJson(HttpResponseMessage response) =>
+        Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
 
     [Fact]
     public async Task Post_NestedGraphCrudRoundTrip_OverHttp()
@@ -146,9 +150,11 @@ public class EndpointTests : IDisposable
     {
         var read = await client.GetAsync("/simpledataplural/424242");
         Assert.Equal(HttpStatusCode.NotFound, read.StatusCode);
+        AssertProblemJson(read);
 
         var delete = await client.DeleteAsync("/simpledataplural/424242");
         Assert.Equal(HttpStatusCode.NotFound, delete.StatusCode);
+        AssertProblemJson(delete);
 
         var update = await client.PutAsJsonAsync(
             "/simpledataplural/424242",
@@ -162,5 +168,6 @@ public class EndpointTests : IDisposable
             }
         );
         Assert.Equal(HttpStatusCode.NotFound, update.StatusCode);
+        AssertProblemJson(update);
     }
 }
