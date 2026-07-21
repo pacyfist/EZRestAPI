@@ -90,7 +90,8 @@ public static class ProviderExtensions
         NestedType? Nested = null,
         bool IsModelReference = false,
         bool IsUnsupportedNestedShape = false,
-        bool IsScalarOptOut = false
+        bool IsScalarOptOut = false,
+        EquatableArray<string> DataAnnotations = default
     )
     {
         /// <summary>
@@ -422,6 +423,17 @@ public static class ProviderExtensions
             property.Type.IsReferenceType
             && property.NullableAnnotation == NullableAnnotation.NotAnnotated;
 
+        var dataAnnotations = new EquatableArray<string>(
+            property
+                .GetAttributes()
+                .Where(a =>
+                    a.AttributeClass?.ContainingNamespace?.ToDisplayString()
+                    == "System.ComponentModel.DataAnnotations"
+                )
+                .Select(RenderAttribute)
+                .ToArray()
+        );
+
         Property Plain(bool isModelReference = false, bool isUnsupportedNestedShape = false) =>
             new(
                 IsRequired: property.IsRequired,
@@ -432,7 +444,8 @@ public static class ProviderExtensions
                 IsUnsupportedNestedShape: isUnsupportedNestedShape,
                 IsScalarOptOut: property
                     .GetAttributes()
-                    .Any(a => a.AttributeClass?.ToDisplayString() == ScalarAttributeName)
+                    .Any(a => a.AttributeClass?.ToDisplayString() == ScalarAttributeName),
+                DataAnnotations: dataAnnotations
             );
 
         // Arrays of annotated types are not supported containers.
@@ -482,7 +495,8 @@ public static class ProviderExtensions
                         PropertyName: property.Name,
                         IsNonNullableReferenceType: isNonNullableReferenceType,
                         Kind: NestedKind.Collection,
-                        Nested: TryCreateNestedType(nestedElement, visited)
+                        Nested: TryCreateNestedType(nestedElement, visited),
+                        DataAnnotations: dataAnnotations
                     );
                 }
 
@@ -505,11 +519,72 @@ public static class ProviderExtensions
                 PropertyName: property.Name,
                 IsNonNullableReferenceType: isNonNullableReferenceType,
                 Kind: NestedKind.Single,
-                Nested: singleNested
+                Nested: singleNested,
+                DataAnnotations: dataAnnotations
             );
         }
 
         return Plain(isModelReference: HasAttribute(namedType, ModelAttributeName));
+    }
+
+    /// <summary>
+    /// Reconstructs an attribute application (fully-qualified type name +
+    /// positional and named argument literals) as a C# string so it can be
+    /// re-emitted verbatim on a generated DTO property. Only literal-shaped
+    /// arguments are supported; anything else falls back to a compilable cast.
+    /// </summary>
+    private static string RenderAttribute(AttributeData attribute)
+    {
+        var name = attribute.AttributeClass!.ToDisplayString();
+
+        var arguments = attribute
+            .ConstructorArguments.Select(RenderTypedConstant)
+            .Concat(
+                attribute.NamedArguments.Select(named =>
+                    $"{named.Key} = {RenderTypedConstant(named.Value)}"
+                )
+            )
+            .ToArray();
+
+        return arguments.Length > 0 ? $"{name}({string.Join(", ", arguments)})" : name;
+    }
+
+    private static string RenderTypedConstant(TypedConstant constant)
+    {
+        if (constant.IsNull)
+        {
+            return "null";
+        }
+
+        switch (constant.Kind)
+        {
+            case TypedConstantKind.Array:
+                var elementType =
+                    (constant.Type as IArrayTypeSymbol)?.ElementType.ToDisplayString() ?? "object";
+                return $"new {elementType}[] {{ {string.Join(", ", constant.Values.Select(RenderTypedConstant))} }}";
+
+            case TypedConstantKind.Type:
+                return constant.Value is ITypeSymbol type
+                    ? $"typeof({type.ToDisplayString()})"
+                    : "null";
+
+            case TypedConstantKind.Enum:
+                var enumType = constant.Type!;
+                var member = enumType
+                    .GetMembers()
+                    .OfType<IFieldSymbol>()
+                    .FirstOrDefault(f => f.HasConstantValue && Equals(f.ConstantValue, constant.Value));
+                return member is not null
+                    ? $"{enumType.ToDisplayString()}.{member.Name}"
+                    : $"({enumType.ToDisplayString()}){constant.Value}";
+
+            default:
+                return SymbolDisplay.FormatPrimitive(
+                        constant.Value!,
+                        quoteStrings: true,
+                        useHexadecimalNumbers: false
+                    ) ?? "null";
+        }
     }
 
     private static bool HasAttribute(INamedTypeSymbol symbol, string attributeName)
