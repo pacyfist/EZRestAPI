@@ -285,6 +285,7 @@ public class GenerationTests
 
         var bootstrap = GeneratorHarness.GetSource(result, "EZRestAPIExtensions.g.cs");
         Assert.Contains("services.AddScoped<TagRepository>();", bootstrap);
+        Assert.Contains("services.AddProblemDetails();", bootstrap);
         Assert.Contains("app.MapTagEndpoints();", bootstrap);
     }
 }

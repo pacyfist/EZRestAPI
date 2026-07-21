@@ -42,6 +42,8 @@ public class BootstrapGenerator : IIncrementalGenerator
                     writer.WriteLine($"services.AddScoped<{model.SingularName}Repository>();");
                 }
                 writer.WriteLine();
+                writer.WriteLine("services.AddProblemDetails();");
+                writer.WriteLine();
                 writer.WriteLine("return services;");
                 writer.Indent--;
                 writer.WriteLine("}");
