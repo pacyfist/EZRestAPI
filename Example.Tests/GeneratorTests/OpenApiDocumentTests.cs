@@ -131,6 +131,120 @@ public class OpenApiDocumentTests : IDisposable
         );
     }
 
+    /// <summary>Fetches and parses /openapi/v1.json, returning a root element
+    /// detached from the (disposed) JsonDocument via Clone().</summary>
+    private async Task<JsonElement> LoadRootAsync()
+    {
+        var response = await client.GetAsync("/openapi/v1.json");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var document = await JsonDocument.ParseAsync(stream);
+        return document.RootElement.Clone();
+    }
+
+    [Fact]
+    public async Task OpenApiDocument_DescribesValidationAndScalarOptOut()
+    {
+        var root = await LoadRootAsync();
+        var paths = root.GetProperty("paths");
+
+        // Rich-validation model: POST advertises 201 and a 422 validation body.
+        var createReg = Operation(paths, "/registrations", "post");
+        var regResponses = createReg.GetProperty("responses");
+        Assert.True(regResponses.TryGetProperty("201", out _));
+        AssertValidationResponse(root, regResponses, "422");
+
+        // [Scalar] opt-out: the flat resource exists and the FK-shaped ExternalId
+        // produced NO nested route group.
+        Assert.True(paths.TryGetProperty("/sensorreadings", out _), "Missing /sensorreadings.");
+        foreach (var path in paths.EnumerateObject())
+            Assert.DoesNotContain("/externals/", path.Name);
+    }
+
+    [Fact]
+    public async Task OpenApiDocument_DescribesMultiParentAndChainedRelationships()
+    {
+        var root = await LoadRootAsync();
+        var paths = root.GetProperty("paths");
+
+        // Review has two parents -> nested collection under each, plus the flat route.
+        Assert.True(paths.TryGetProperty("/reviews", out _), "Missing flat /reviews.");
+        Assert.True(
+            paths.TryGetProperty("/authors/{parentId}/reviews", out _),
+            "Missing /authors/{parentId}/reviews."
+        );
+        Assert.True(
+            paths.TryGetProperty("/books/{parentId}/reviews", out _),
+            "Missing /books/{parentId}/reviews."
+        );
+
+        // Chapter hangs off Book, which itself hangs off Author (3-level chain).
+        Assert.True(
+            paths.TryGetProperty("/books/{parentId}/chapters", out _),
+            "Missing /books/{parentId}/chapters."
+        );
+    }
+
+    [Fact]
+    public async Task OpenApiDocument_DescribesSingleOwnedReference()
+    {
+        var root = await LoadRootAsync();
+        var paths = root.GetProperty("paths");
+
+        Assert.True(paths.TryGetProperty("/profiles", out _), "Missing /profiles.");
+
+        // The Profile read schema embeds an AddressDto (single owned reference),
+        // and Address is NOT independently routed.
+        var schemas = root.GetProperty("components").GetProperty("schemas");
+        Assert.True(schemas.TryGetProperty("ReadProfileResponse", out var readProfile));
+        var addressProp = readProfile.GetProperty("properties").GetProperty("address");
+        var refText = addressProp.TryGetProperty("$ref", out var r)
+            ? r.GetString()
+            : addressProp.GetRawText();
+        Assert.Contains("Address", refText);
+
+        foreach (var path in paths.EnumerateObject())
+            Assert.DoesNotContain("/addresses", path.Name);
+    }
+
+    [Fact]
+    public async Task OpenApiDocument_DescribesConstructorFactoryAndOwnedChildCollection()
+    {
+        var root = await LoadRootAsync();
+        var paths = root.GetProperty("paths");
+
+        // Constructor-factory aggregate: POST create + a command sub-resource, no PUT.
+        var createCart = Operation(paths, "/shoppingcarts", "post");
+        Assert.True(createCart.GetProperty("responses").TryGetProperty("201", out _));
+        Assert.True(
+            paths.TryGetProperty("/shoppingcarts/{id}/checkout", out _),
+            "Missing /shoppingcarts/{id}/checkout."
+        );
+        Assert.False(
+            paths.TryGetProperty("/shoppingcarts/{id}", out var cartItem)
+                && cartItem.TryGetProperty("put", out _),
+            "Aggregate must not expose PUT."
+        );
+
+        // OwnsMany child-entity collection: the Invoice read embeds InvoiceLineDto.
+        Assert.True(
+            paths.TryGetProperty("/invoices/{id}/add-line", out _),
+            "Missing /invoices/{id}/add-line."
+        );
+        var schemas = root.GetProperty("components").GetProperty("schemas");
+        Assert.True(schemas.TryGetProperty("ReadInvoiceResponse", out var readInvoice));
+        var linesProp = readInvoice.GetProperty("properties").GetProperty("lines");
+        Assert.Equal("array", linesProp.GetProperty("type").GetString());
+        // The element must be the generated InvoiceLineDto, NOT the raw domain
+        // entity Example.Models.InvoiceLine — the domain type must never leak
+        // into the public read surface.
+        Assert.Contains("InvoiceLineDto", linesProp.GetProperty("items").GetRawText());
+        Assert.False(
+            schemas.TryGetProperty("InvoiceLine", out _),
+            "The domain entity InvoiceLine leaked into the OpenAPI schema set."
+        );
+    }
+
     private static JsonElement Operation(JsonElement paths, string path, string verb)
     {
         Assert.True(paths.TryGetProperty(path, out var item), $"Missing path {path}.");
