@@ -1,46 +1,218 @@
 # EZRestAPI
 
-An opinionated C# source generator framework for quickly creating CRUD APIs on top of Entity Framework Core models.
+Write a plain C# class. Get a full REST API. No controllers to write.
 
-The goal: get from a single entity model to a fully working REST API by adding just one attribute.
+EZRestAPI is a source generator. It reads your classes at compile time and writes the
+code for a working REST API. You only add attributes to your own classes.
 
-## How it works
+**What you get:**
 
-Annotate a `partial` class with the `[EZRestAPI.Model]` attribute:
+- CRUD routes for each class (create, read, list, update, delete) backed by a database.
+- Entity Framework Core storage and ASP.NET Core minimal API routes, generated for you.
+- OpenAPI docs and clean error responses (RFC 9457 `problem+json`) out of the box.
+
+## Contents
+
+- [Add it to your project](#add-it-to-your-project)
+- [Quick start](#quick-start)
+- [Your models](#your-models)
+- [Links between models](#links-between-models)
+- [Owned data](#owned-data)
+- [Rich domain models (aggregates)](#rich-domain-models-aggregates)
+- [Errors](#errors)
+- [API docs (OpenAPI)](#api-docs-openapi)
+- [Build warnings](#build-warnings)
+- [The Example project & tests](#the-example-project--tests)
+
+## Add it to your project
+
+Reference the generator as an analyzer (it runs during build; there is no NuGet
+package yet):
+
+```xml
+<ItemGroup>
+  <ProjectReference Include="..\EZRestAPI\EZRestAPI.csproj" OutputItemType="Analyzer" />
+</ItemGroup>
+```
+
+Wire it up in `Program.cs`. Give your `DbContext` a connection string named after it
+(here the context is `CustomDbContext`, so the string is named `CustomDbContext`):
 
 ```csharp
-namespace Example.Models;
+builder.Services.AddDbContextFactory<CustomDbContext>(o =>
+    o.UseSqlServer(builder.Configuration.GetConnectionString("CustomDbContext")));
 
-[EZRestAPI.Model("SimpleData", "SimpleDataPlural")]
-public partial class SimpleDataModel
+builder.Services.AddEZRestAPI();   // register the generated services
+builder.Services.AddOpenApi();     // needed for MapOpenApi below
+
+var app = builder.Build();
+
+app.MapEZRestAPI();   // add the generated routes
+app.MapOpenApi();     // serve the OpenAPI document
+
+app.Run();
+```
+
+## Quick start
+
+Mark a class with `[EZRestAPI.Model(...)]`. The first name is singular, the second
+is plural. Make the class `partial` so the generator can add to it (it adds an `int Id`
+key for you):
+
+```csharp
+[EZRestAPI.Model("Book", "Books")]
+public partial class BookModel
 {
-    public required int IntegerProperty { get; set; }
-
-    public required double DoubleProperty { get; set; }
-
-    public required string? StringProperty { get; set; }
-
-    public required DateTimeOffset DateTimeOffsetProperty { get; set; }
+    public required string Title { get; set; }
 }
 ```
 
-The attribute takes a singular name and a plural name, which are used to name the generated types and `DbSet` properties. At compile time, [incremental source generators](https://learn.microsoft.com/en-us/dotnet/csharp/roslyn-sdk/source-generators-overview) then produce:
+That gives you these routes. The path is the plural name, lowercased (`/books`):
 
-| Generated type | Description |
-|---|---|
-| `SimpleDataModel` (partial) | Extends your model with a `[Key] public int Id` property |
-| `CustomDbContext` | An EF Core `DbContext` with a `DbSet<T>` for every annotated model |
-| `SimpleDataRepository` | Repository with `CreateAsync`, `ReadAsync`, `UpdateAsync`, `DeleteAsync` |
-| `CreateSimpleDataRequest` | DTO for create requests (all model properties) |
-| `CreateSimpleDataResponse` | DTO for create responses (`Id` + all model properties) |
-| `ReadSimpleDataResponse` | DTO for read responses (nullable `Id` + all model properties) |
-| `UpdateSimpleDataRequest` | DTO for update requests (`Id` + all model properties) |
-| `SimpleDataEndpoints` | Minimal-API endpoints: CRUD routes under `/simpledataplural` |
-| `EZRestAPIExtensions` | `AddEZRestAPI()` (registers all repositories) and `MapEZRestAPI()` (maps all endpoints) |
+- `POST /books` — create one. Returns `201 Created`.
+- `GET /books/{id}` — read one. Returns `200 OK`, or `404` if not found.
+- `GET /books` — list them, paginated (`?page` and `?pageSize`). Returns `200 OK`.
+- `PUT /books/{id}` — replace one. Returns `204 No Content`, or `404` if not found.
+- `DELETE /books/{id}` — delete one. Returns `204 No Content`, or `404` if not found.
 
-## Nested models
+## Your models
 
-A model can contain other models — as a single object or a collection — to any depth. Mark aggregate parts with `[EZRestAPI.Nested]`:
+A model is a plain C# class. Mark it `partial` and add `[EZRestAPI.Model]` with a
+singular and a plural name. At compile time, EZRestAPI reads the class and writes,
+for each `[Model]`:
+
+- An `Id` field (`int`, the primary key). You don't write it. If you want your own `Id`, add one — it must be an `int`.
+- A `DbSet` on your database context, named after the plural name (so `Books`). This is the table.
+- A repository class (`BookRepository`) that does the database work.
+- Request and response types (DTOs): `CreateBookRequest`, `CreateBookResponse`, `ReadBookResponse`, `UpdateBookRequest`.
+- The REST endpoints shown in [Quick start](#quick-start).
+
+### Field types
+
+Your model's public properties become table columns. Common types work as you'd expect:
+
+- `string`
+- `int`, `long`
+- `bool`
+- `decimal`
+- `DateTime`, `DateTimeOffset`
+- `Guid`
+- `byte[]`
+
+More are supported too: `byte`, `short`, `float`, `double`, and `TimeSpan`. Add `?` to make a field nullable (`string?`).
+
+For the full list of every supported type, see `Example/Models/AuthorModel.cs`. It uses each one and shows the database column it maps to.
+
+### Validation
+
+Put standard .NET validation attributes on your fields. EZRestAPI copies them onto the generated request types and checks them on every `POST` and `PUT`. Common ones:
+
+- `[Required]` — the field must be sent.
+- `[MaxLength(n)]` / `[StringLength(min, max)]` — length limits.
+- `[Range(min, max)]` — number range.
+- `[EmailAddress]` — must look like an email.
+- `[RegularExpression(pattern)]` — must match a pattern.
+
+```csharp
+[EZRestAPI.Model("Registration", "Registrations")]
+public partial class RegistrationModel
+{
+    [Required]
+    [StringLength(32, MinimumLength = 3)]
+    public required string Username { get; set; }
+
+    [Required]
+    [EmailAddress]
+    public required string Email { get; set; }
+
+    [Range(18, 120)]
+    public int Age { get; set; }
+}
+```
+
+If the input is bad, the API returns `422` with an `application/problem+json` body (RFC 9457). It includes an `errors` map: each field name points to a list of what went wrong. So the caller sees exactly which fields failed and why.
+
+```json
+{
+  "type": "...",
+  "title": "One or more validation errors occurred.",
+  "status": 422,
+  "detail": "One or more fields failed validation; see 'errors' for details.",
+  "code": "unprocessableEntity",
+  "errors": {
+    "Username": ["The field Username must be a string with a minimum length of 3 and a maximum length of 32."],
+    "Email": ["The Email field is not a valid e-mail address."]
+  }
+}
+```
+
+One extra check happens for free: a non-nullable `string` (like `string Title` with no `?`) is treated as `[Required]`, so a missing value is caught as a `422` instead of failing later.
+
+See `Example/Models/RegistrationModel.cs` for a full validation example.
+
+## Links between models
+
+To link two models, add a property named `{Singular}Id`. If its name (minus `Id`)
+matches another model's singular name, and its type is `int` or `int?`, it becomes
+a foreign key. Use `int?` if the link is optional.
+
+`Book` points to `Author`:
+
+```csharp
+[EZRestAPI.Model("Book", "Books")]
+public partial class BookModel
+{
+    [MaxLength(255)]
+    public required string Title { get; set; }
+
+    public required int AuthorId { get; set; }  // -> Author
+}
+```
+
+You get two ways to reach the same books:
+
+- Flat: `/books`, `/books/{id}` (all the usual CRUD).
+- Nested under the parent: `/authors/{authorId}/books`, `/authors/{authorId}/books/{id}`.
+
+The nested routes only show books that belong to that author. Creating a book under
+`/authors/5/books` sets `AuthorId` to `5` for you.
+
+### Pagination
+
+The two list routes (`GET /books` and `GET /authors/{authorId}/books`) return one
+page at a time. Two query values control it:
+
+- `?page` — which page, starts at `1` (default `1`).
+- `?pageSize` — how many per page (default `20`, max `100`).
+
+If you ask for more than 100, it quietly gives you 100. If `page` or `pageSize` is
+less than 1, you get `422` with a message.
+
+The response wraps the list:
+
+```json
+{
+  "items": [ ... ],
+  "totalCount": 42,
+  "page": 1,
+  "pageSize": 20
+}
+```
+
+### When you get an error
+
+- Reading `/authors/5/books/9` but book 9 belongs to another author -> `404`.
+- Using a parent id that does not exist (`/authors/999/books`) -> `404`.
+- Creating or updating a book with an `AuthorId` that does not exist -> `422`.
+- Deleting an author that still has books -> `409` (the books block it).
+
+## Owned data
+
+Use `[EZRestAPI.Nested]` for parts that belong to one parent and have no life of
+their own. They are stored with the parent (EF owned types). They get no routes.
+You save the whole tree in one call, and deleting the parent deletes them too.
+
+A post has comments, and each comment has reactions:
 
 ```csharp
 [EZRestAPI.Model("Post", "Posts")]
@@ -69,148 +241,225 @@ public class ReactionModel
 }
 ```
 
-Nested classes are mapped as [EF Core owned entity types](https://learn.microsoft.com/en-us/ef/core/modeling/owned-entities) (`OwnsOne`/`OwnsMany`, configured in the generated `OnModelCreating`), and each generates a `{Name}Dto` plus a recursive entity/DTO mapper. The whole CRUD surface then works on the full graph:
+There is no `/comments` route. You send the comments and reactions inside the post,
+and read them back inside the post.
 
-- **Create** — `POST /posts` accepts the nested JSON graph and inserts it in one transaction.
-- **Read** — `GET /posts/{id}` returns the graph (owned types are loaded automatically).
-- **Update** — `PUT /posts/{id}` replaces the nested content; removed children are deleted as orphans.
-- **Delete** — `DELETE /posts/{id}` cascades through all nested tables.
+### Opt out with [Scalar]
 
-Rules: a `[Nested]` class belongs to its owner (it gets no `DbSet`, repository, or endpoints of its own), the nesting must be tree-shaped (no cycles), and a `[Model]` should reference another `[Model]` by id, not by navigation property.
-
-Wiring up the whole API is then two calls:
-
-```csharp
-builder.Services.AddDbContextFactory<CustomDbContext>(o =>
-    o.UseSqlServer(builder.Configuration.GetConnectionString("Example")));
-
-builder.Services.AddEZRestAPI();
-
-var app = builder.Build();
-
-app.MapEZRestAPI();
-
-app.Run();
-```
-
-Which serves, for each model (plural name lowercased as the route):
-
-| Route | Verb | Response |
-|---|---|---|
-| `/simpledataplural` | POST | `201 Created` + response DTO |
-| `/simpledataplural/{id}` | GET | `200 OK` + response DTO, or `404` |
-| `/simpledataplural/{id}` | PUT | `204 No Content`, or `404` |
-| `/simpledataplural/{id}` | DELETE | `204 No Content`, or `404` |
-
-## Relationships between models
-
-Two top-level `[Model]`s become an association by naming convention: a property named `{Singular}Id` — where `{Singular}` is the singular name of another `[Model]` — is treated as a foreign key to that model. So a `Book` with `AuthorId` becomes a child of `Author`:
+Sometimes a property is named like a foreign key but is not one. If you have an
+`int` property ending in `Id` and no matching model exists, the generator warns you
+with `EZR011`. Add `[EZRestAPI.Scalar]` to say "this is just a plain number, leave
+it alone." The warning goes away and no nested route is made.
 
 ```csharp
-[EZRestAPI.Model("Author", "Authors")]
-public partial class AuthorModel
+[EZRestAPI.Model("SensorReading", "SensorReadings")]
+public partial class SensorReadingModel
 {
-    [MaxLength(255)]
-    public required string FirstName { get; set; }
-}
+    [EZRestAPI.Scalar]
+    public required int ExternalId { get; set; }  // not a link, just a value
 
-[EZRestAPI.Model("Book", "Books")]
-public partial class BookModel
-{
-    [MaxLength(255)]
-    public required string Title { get; set; }
-
-    public required int AuthorId { get; set; }
+    public required double Value { get; set; }
+    public required DateTimeOffset TakenAt { get; set; }
 }
 ```
 
-Detection rules:
+## Rich domain models (aggregates)
 
-- The property name must be `{Singular}Id` and match an existing `[Model]`'s singular name.
-- The type must be `int` (required parent) or `int?` (optional parent). Any other type — for example a `Guid OrderId` with no `Order` model — stays a plain scalar and is never treated as a foreign key.
-- Mark the property `[EZRestAPI.Scalar]` to opt out and force plain-scalar treatment even when the name and type would otherwise match.
-- A `{X}Id` `int` property with no matching `[Model]` raises the `EZR011` **warning** (build still succeeds), steering you to create the model, fix the type, or add `[Scalar]`.
+Some classes have rules to protect. A plain `[Model]` gives you a `PUT` that overwrites every
+field. That is fine for simple data, but wrong when the class must guard its own state.
 
-Each foreign key produces a real EF Core relationship in `OnModelCreating` with `DeleteBehavior.Restrict`, and the generator emits both flat routes and parent-scoped nested routes (plural names lowercased):
+An aggregate fixes this. You do not overwrite it. You **create** it through one factory, and you
+**change** it through named actions. Nothing else can touch its insides.
 
-| Route | Verb | Behavior |
-|---|---|---|
-| `/books` | GET | Paginated list of all books |
-| `/books` | POST | Flat create; `AuthorId` supplied in the body |
-| `/books/{id}` | GET / PUT / DELETE | Flat item |
-| `/authors/{authorId}/books` | GET | Paginated list scoped to that author |
-| `/authors/{authorId}/books` | POST | Create under the author; foreign key comes from the route and is omitted from the body |
-| `/authors/{authorId}/books/{bookId}` | GET / PUT / DELETE | Scoped item (verifies the book belongs to the author) |
+### Mark the class
 
-Collections are paginated with `?page=` (1-based, default `1`) and `?pageSize=` (default `20`, capped at `100`; larger values are clamped, not rejected). `page < 1` or `pageSize < 1` returns `400`. The envelope is identical for flat and nested lists:
+Use `[EZRestAPI.Aggregate("Order", "Orders")]` (singular, plural). Add a private
+parameterless constructor so EF Core can load rows from the database. Mark it `partial` so the
+generator can add code to it.
 
-```json
-{ "items": [ ... ], "totalCount": 57, "page": 1, "pageSize": 20 }
+```csharp
+[EZRestAPI.Aggregate("Order", "Orders")]
+public partial class Order
+{
+    private Order() { } // EF needs this
+}
 ```
 
-Status-code semantics:
+### Create it with a [Factory]
 
-- **Scoped item** whose foreign key does not match the route parent → `404`.
-- **Nested POST** to a parent that does not exist → `404`.
-- **Flat POST / PUT** with a foreign key that references no existing parent → `409 Conflict`.
-- **DELETE parent that still has children** → `409 Conflict` (`RESTRICT`; the children are preserved, so reassign or delete them first). This differs from `[Nested]` owned types, which cascade.
+One method makes new orders. Mark it `[EZRestAPI.Factory]`. It can be a static method
+(like below) **or** a public constructor. Its parameters become the request body.
 
-## Solution structure
-
-| Project | Description |
-|---|---|
-| `EZRestAPI` | The source generators (`netstandard2.0` Roslyn analyzer project) |
-| `Example` | ASP.NET Core minimal API (`net10.0`) showing the generators in use with SQL Server |
-| `Example.Tests` | xUnit integration tests running the generated repositories against a real SQL Server via [Testcontainers](https://dotnet.testcontainers.org/) |
-
-To consume the generator, reference it as an analyzer:
-
-```xml
-<ProjectReference Include="..\EZRestAPI\EZRestAPI.csproj" OutputItemType="Analyzer" />
+```csharp
+[EZRestAPI.Factory]
+public static Order Place(CustomerRef customer)
+{
+    return new Order { Customer = customer, Status = "Placed" };
+}
 ```
 
-## Running the tests
+This gives you `POST /orders` which returns `201 Created`.
 
-The integration tests spin up a SQL Server container, so Docker must be running:
+### Read shows read-only fields too
+
+Fields with `private set`, get-only, or `init` still show up when you read the order. So
+`Status` and the `Lines` list below are returned even though outside code cannot set them.
+
+```csharp
+public string Status { get; private set; } = "";
+public IReadOnlyList<string> Lines => _lines;   // read-only view over a private list
+private readonly List<string> _lines = new();
+```
+
+### Change it with [Command] actions
+
+Each `[EZRestAPI.Command]` method becomes its own `POST` action. You can pass a route name
+(`[Command("cancel")]`), or leave it blank and the method name is turned into kebab-case
+(`AddLine` -> `add-line`). Parameters become the request body.
+
+```csharp
+[EZRestAPI.Command("cancel")]
+public void Cancel()
+{
+    if (Status == "Shipped")
+        throw new InvalidOperationException("Cannot cancel a shipped order.");
+    Status = "Cancelled";
+}
+
+[EZRestAPI.Command]                       // route: add-line
+public void AddLine(string sku, int quantity)
+{
+    if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
+    _lines.Add($"{sku} x{quantity}");
+}
+```
+
+You get:
+
+```
+POST /orders/{id}/cancel
+POST /orders/{id}/add-line
+```
+
+Each one loads the saved order, runs the method, saves it, and returns `200 OK` with the
+updated order. If no order has that id, you get `404`.
+
+There is **no PUT** for aggregates. That is the whole point: you change them only through
+these named actions.
+
+### The error rule
+
+Your methods throw normal exceptions. The generator maps them to status codes:
+
+- Bad input (`ArgumentException` and any subclass, like `ArgumentOutOfRangeException`) -> **422**
+- Wrong state (`InvalidOperationException`) -> **409**
+
+So `AddLine` with `quantity = 0` returns 422. `Cancel` on a shipped order returns 409. Both
+come back as `application/problem+json`.
+
+### Value objects and child lists
+
+Parts that live inside the aggregate are `[EZRestAPI.Nested]` owned types (see
+[Owned data](#owned-data)). They have no routes of their own; they travel with the aggregate. A
+get-only `IReadOnlyList<Child>` shows up in reads as a list of `{Child}Dto`.
+
+```csharp
+[EZRestAPI.Nested("CustomerRef")]
+public class CustomerRef
+{
+    public required string Name { get; set; }
+    public required string Email { get; set; }
+}
+```
+
+### See the full examples
+
+- `Example/Models/OrderAggregate.cs` — static-method factory, a `cancel` command, and a
+  string-list projection.
+- `Example/Models/InvoiceAggregate.cs` — a child-entity list (`InvoiceLine`) mapped as an
+  owned collection.
+- `Example/Models/ShoppingCartAggregate.cs` — a factory that is a public constructor instead
+  of a static method.
+
+## Errors
+
+Every error comes back as `application/problem+json` (RFC 9457). The body has the same fields each time:
+
+- `type` — a link that names the error kind.
+- `title` — a short label, like `Not Found`.
+- `status` — the HTTP status code.
+- `detail` — a plain sentence about what went wrong.
+- `code` — a short machine string: `notFound`, `conflict`, or `unprocessableEntity`.
+
+When you send bad input you get `422` and one extra field: `errors` — a map from each bad field name to a list of messages (see the [Validation](#validation) example).
+
+Common status codes and when you get them:
+
+| Status | Meaning | When |
+| --- | --- | --- |
+| 200 OK | Success with a body | Read one, list, or run an aggregate command |
+| 201 Created | Made a new thing | POST create |
+| 204 No Content | Success, empty body | PUT update, DELETE |
+| 404 Not Found | The thing is not there | Missing id, missing nested parent, or a scoped id that does not match |
+| 409 Conflict | The action clashes with the current state | Delete a parent that still has children; an aggregate command that throws `InvalidOperationException` |
+| 422 Unprocessable Entity | The request was understood but not valid | Failed validation, a bad foreign key in the body, `page`/`pageSize` below 1, or an aggregate command that throws `ArgumentException` |
+
+## API docs (OpenAPI)
+
+The Example app turns on OpenAPI in two lines:
+
+```csharp
+builder.Services.AddOpenApi();   // in service setup
+app.MapOpenApi();                // only when in Development
+```
+
+In Development you can open `/openapi/v1.json` to get the full document. Each route is described with:
+
+- a **tag** — the model's plural name, so routes group by resource.
+- an **operation id** — a stable name like `CreateBook` or `ListBooks`, used by client generators.
+- its **error responses** — every route lists the `application/problem+json` errors it can return. A `422` is documented as a validation problem so the `errors` map shows up in the schema.
+
+## Build warnings
+
+The generator checks your models at compile time. Most problems stop the build (Error); one is a Warning. Fix the code and rebuild.
+
+| Code | Level | Meaning |
+| --- | --- | --- |
+| EZR001 | Error | A `[Model]` class is not `partial`. |
+| EZR002 | Error | Two models share the same singular name. |
+| EZR003 | Error | Two models share the same plural name. |
+| EZR004 | Error | A property points at another `[Model]` type; use its id, or mark it `[Nested]`. |
+| EZR005 | Error | `[Nested]` classes contain each other in a loop; nesting must be a tree. |
+| EZR006 | Error | Two `[Nested]` classes share the same singular name. |
+| EZR007 | Error | An `Id` property is not an `int`; only `int` keys work. |
+| EZR008 | Error | A name you gave is not a valid C# identifier. |
+| EZR009 | Error | Nested items sit in an unsupported collection; use `List<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, or `IReadOnlyCollection<T>`. |
+| EZR010 | Error | A class has `[Model]` plus `[Nested]` (or `[Model]` plus `[Aggregate]`); pick one. |
+| EZR011 | Warning | A property looks like a foreign key (`XId`) but no `[Model]` has singular name `X`; add that model, or mark it `[Scalar]`. |
+| EZR012 | Error | An `[Aggregate]` does not have exactly one `[Factory]` entry point. |
+
+## The Example project & tests
+
+`Example/` is a small runnable app that uses every feature. Look at `Example/Models/` to see each one:
+
+- `SimpleDataModel` — the smallest model.
+- `AuthorModel` — many property types; and `BookModel` shows a foreign-key relationship.
+- `PostModel` / `CommentModel` / `ReactionModel` — `[Nested]` owned types.
+- `RegistrationModel` — validation.
+- `SensorReadingModel` — `[Scalar]` to opt an id-shaped field out.
+- `ReviewModel` — more than one foreign key.
+- `OrderAggregate`, `ShoppingCartAggregate` (constructor factory), `InvoiceAggregate` (`OwnsMany` child) — DDD aggregates.
+
+`Example/Program.cs` is the full wiring (`AddEZRestAPI`, `MapEZRestAPI`, OpenAPI).
+
+`Example.Tests` runs the generated API for real. Most tests boot the app against a live SQL Server, so **they need Docker** — a container starts automatically through Testcontainers (`MsSqlContainerFixture`). Run them with:
 
 ```bash
 dotnet test
 ```
 
-## Features
+One test class, `OpenApiDocumentTests`, only reads the OpenAPI document and needs no database or Docker. The database-backed classes are marked `[Collection("MsSql")]` and share one container.
 
-1. Model
-   - [x] Generate `Id` key property
-2. DbContext
-   - [x] Generate `CustomDbContext` with a `DbSet` per model
-3. Repository
-   - [x] Create
-   - [x] Read
-   - [x] Update
-   - [x] Delete
-4. DTOs
-   - [x] Create request/response
-   - [x] Read response
-   - [x] Update request
-5. REST endpoints
-   - [x] POST (create)
-   - [x] GET (read)
-   - [x] PUT (update)
-   - [x] DELETE (delete)
-6. Bootstrap
-   - [x] `AddEZRestAPI()` DI registration
-   - [x] `MapEZRestAPI()` route mapping
-7. Nested models
-   - [x] `[Nested]` aggregate parts as EF owned types
-   - [x] Nested DTOs + recursive mappers
-   - [x] Full-graph create/read/update/delete at any depth
-8. Relationships between models
-   - [x] `{Singular}Id` foreign keys by convention (`int`/`int?`), `[Scalar]` opt-out, `EZR011` warning
-   - [x] `DeleteBehavior.Restrict` relationship configuration
-   - [x] Flat + parent-scoped nested CRUD routes
-   - [x] Paginated `PagedResponse<T>` collections
-   - [x] `404`/`409` referential-integrity semantics
+---
 
-## Status
-
-This project is a work in progress — the generated API shape (DTOs, routes, repository signatures) is still evolving.
+_Status: work in progress._
