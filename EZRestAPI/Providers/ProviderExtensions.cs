@@ -17,14 +17,20 @@ public static class ProviderExtensions
     public const string CommandAttributeName = "EZRestAPI.CommandAttribute";
 
     /// <summary>
-    /// Collection shapes supported for nested model properties: they must be
-    /// assignable from List&lt;T&gt; and usable as EF Core collection navigations.
+    /// Collection shapes supported for nested model properties. The mutable
+    /// forms back request DTOs and EF navigations directly; the read-only forms
+    /// (<c>IReadOnlyList&lt;T&gt;</c>/<c>IReadOnlyCollection&lt;T&gt;</c>) are the
+    /// idiomatic DDD projection over a private backing field, mapped as EF
+    /// navigations via field access. All must resolve their element to a
+    /// generated <c>{Nested}Dto</c> so the domain type never leaks into the API.
     /// </summary>
     private static readonly string[] SupportedCollectionTypes =
     [
         "System.Collections.Generic.List<T>",
         "System.Collections.Generic.IList<T>",
         "System.Collections.Generic.ICollection<T>",
+        "System.Collections.Generic.IReadOnlyList<T>",
+        "System.Collections.Generic.IReadOnlyCollection<T>",
     ];
 
     public enum NestedKind

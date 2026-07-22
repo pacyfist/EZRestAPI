@@ -195,4 +195,53 @@ public class AggregateReadTests
             dbContext
         );
     }
+
+    // An aggregate exposing a get-only IReadOnlyList of a [Nested] CHILD ENTITY
+    // (not a primitive projection like Order's IReadOnlyList<string>).
+    private const string InvoiceAggregate = """
+        namespace Tests;
+
+        using System.Collections.Generic;
+
+        [EZRestAPI.Nested("InvoiceLine")]
+        public class InvoiceLine
+        {
+            public required string Sku { get; set; }
+            public required int Quantity { get; set; }
+        }
+
+        [EZRestAPI.Aggregate("Invoice", "Invoices")]
+        public partial class Invoice
+        {
+            private Invoice() { }
+
+            [EZRestAPI.Factory]
+            public static Invoice Open() => new Invoice();
+
+            public IReadOnlyList<InvoiceLine> Lines => _lines;
+            private readonly List<InvoiceLine> _lines = new();
+        }
+        """;
+
+    [Fact]
+    public void ReadResponse_MapsReadOnlyListOfNestedEntity_ToDtoList_NotRawEntity()
+    {
+        var result = GeneratorHarness.Run(InvoiceAggregate);
+        var dto = GeneratorHarness.GetSource(result, "ReadInvoiceResponse.g.cs");
+
+        // The element resolves to the generated Dto; the domain entity must not leak.
+        Assert.Contains("List<InvoiceLineDto> Lines { get; set; }", dto);
+        Assert.DoesNotContain("InvoiceLine>", dto.Replace("InvoiceLineDto>", ""));
+    }
+
+    [Fact]
+    public void DbContext_MapsReadOnlyListOfNestedEntity_AsOwnsMany_NotPrimitiveCollection()
+    {
+        var result = GeneratorHarness.Run(InvoiceAggregate);
+        var dbContext = GeneratorHarness.GetSource(result, "CustomDbContext.g.cs");
+
+        // A child-entity collection is owned (OwnsMany), never a primitive collection.
+        Assert.Contains("OwnsMany(e => e.Lines)", dbContext);
+        Assert.DoesNotContain("PrimitiveCollection(e => e.Lines)", dbContext);
+    }
 }
