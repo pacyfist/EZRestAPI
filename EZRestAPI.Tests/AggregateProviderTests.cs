@@ -82,7 +82,10 @@ public class AggregateProviderTests
     {
         var probe = GeneratorHarness.RunAggregateProbe(OrderAggregate);
 
-        Assert.Contains("// FACTORY_PARAM customer : Tests.CustomerRef : Single : CustomerRef", probe);
+        Assert.Contains(
+            "// FACTORY_PARAM customer : Tests.CustomerRef : Single : CustomerRef",
+            probe
+        );
     }
 
     [Fact]

@@ -65,7 +65,10 @@ public class AggregateProbeGenerator : IIncrementalGenerator
                     }
                 }
 
-                ctx.AddSource("AggregateProbe.g.cs", SourceText.From(builder.ToString(), Encoding.UTF8));
+                ctx.AddSource(
+                    "AggregateProbe.g.cs",
+                    SourceText.From(builder.ToString(), Encoding.UTF8)
+                );
             }
         );
     }

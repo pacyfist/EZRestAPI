@@ -22,11 +22,26 @@ public class ScopedRepositoryTests
         var result = GeneratorHarness.Run(Source);
         var repo = GeneratorHarness.GetSource(result, "BookRepository.g.cs");
 
-        Assert.Contains("Task<PagedResponse<ReadBookResponse>?> ListBookByAuthorAsync(int parentId, int page, int pageSize, CancellationToken cancellationToken)", repo);
-        Assert.Contains("Task<int?> CreateBookUnderAuthorAsync(int parentId, CreateBookUnderAuthorRequest request, CancellationToken cancellationToken)", repo);
-        Assert.Contains("Task<ReadBookResponse?> ReadBookUnderAuthorAsync(int parentId, int id, CancellationToken cancellationToken)", repo);
-        Assert.Contains("Task<bool> UpdateBookUnderAuthorAsync(int parentId, int id, UpdateBookUnderAuthorRequest request, CancellationToken cancellationToken)", repo);
-        Assert.Contains("Task<WriteResult> DeleteBookUnderAuthorAsync(int parentId, int id, CancellationToken cancellationToken)", repo);
+        Assert.Contains(
+            "Task<PagedResponse<ReadBookResponse>?> ListBookByAuthorAsync(int parentId, int page, int pageSize, CancellationToken cancellationToken)",
+            repo
+        );
+        Assert.Contains(
+            "Task<int?> CreateBookUnderAuthorAsync(int parentId, CreateBookUnderAuthorRequest request, CancellationToken cancellationToken)",
+            repo
+        );
+        Assert.Contains(
+            "Task<ReadBookResponse?> ReadBookUnderAuthorAsync(int parentId, int id, CancellationToken cancellationToken)",
+            repo
+        );
+        Assert.Contains(
+            "Task<bool> UpdateBookUnderAuthorAsync(int parentId, int id, UpdateBookUnderAuthorRequest request, CancellationToken cancellationToken)",
+            repo
+        );
+        Assert.Contains(
+            "Task<WriteResult> DeleteBookUnderAuthorAsync(int parentId, int id, CancellationToken cancellationToken)",
+            repo
+        );
         Assert.Contains("e.AuthorId == parentId", repo);
         Assert.Contains("AuthorId = parentId,", repo);
     }

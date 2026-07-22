@@ -34,7 +34,8 @@ public class RelationshipTests
     [Fact]
     public void NonIntIdNamedProperty_IsNotAForeignKey()
     {
-        var result = GeneratorHarness.Run("""
+        var result = GeneratorHarness.Run(
+            """
             namespace Tests;
 
             [EZRestAPI.Model("Author", "Authors")]
@@ -43,7 +44,8 @@ public class RelationshipTests
                 public required string Name { get; set; }
                 public System.Guid OrderId { get; set; }
             }
-            """);
+            """
+        );
         var context = GeneratorHarness.GetSource(result, "CustomDbContext.g.cs");
 
         Assert.DoesNotContain("HasForeignKey", context);
@@ -52,7 +54,8 @@ public class RelationshipTests
     [Fact]
     public void ScalarOptOut_SuppressesForeignKey()
     {
-        var result = GeneratorHarness.Run("""
+        var result = GeneratorHarness.Run(
+            """
             namespace Tests;
 
             [EZRestAPI.Model("Author", "Authors")]
@@ -68,7 +71,8 @@ public class RelationshipTests
                 [EZRestAPI.Scalar]
                 public required int AuthorId { get; set; }
             }
-            """);
+            """
+        );
         var context = GeneratorHarness.GetSource(result, "CustomDbContext.g.cs");
 
         Assert.DoesNotContain("HasForeignKey", context);

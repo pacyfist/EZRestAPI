@@ -30,7 +30,10 @@ public class ConflictTests
     {
         var result = GeneratorHarness.Run(Source);
         var repo = GeneratorHarness.GetSource(result, "BookRepository.g.cs");
-        Assert.Contains("public async Task<int?> CreateAsync(CreateBookRequest request, CancellationToken cancellationToken)", repo);
+        Assert.Contains(
+            "public async Task<int?> CreateAsync(CreateBookRequest request, CancellationToken cancellationToken)",
+            repo
+        );
         Assert.Contains("context.Authors.AnyAsync(p => p.Id == request.AuthorId", repo);
     }
 
@@ -39,20 +42,31 @@ public class ConflictTests
     {
         var result = GeneratorHarness.Run(Source);
         var repo = GeneratorHarness.GetSource(result, "AuthorRepository.g.cs");
-        Assert.Contains("public async Task<WriteResult> DeleteAsync(int id, CancellationToken cancellationToken)", repo);
+        Assert.Contains(
+            "public async Task<WriteResult> DeleteAsync(int id, CancellationToken cancellationToken)",
+            repo
+        );
         Assert.Contains("context.Books.AnyAsync(c => c.AuthorId == id", repo);
     }
 
     [Fact]
     public void UnrelatedModel_KeepsSimpleSignatures()
     {
-        var result = GeneratorHarness.Run("""
+        var result = GeneratorHarness.Run(
+            """
             namespace Tests;
             [EZRestAPI.Model("Tag", "Tags")]
             public partial class TagModel { public required string Name { get; set; } }
-            """);
+            """
+        );
         var repo = GeneratorHarness.GetSource(result, "TagRepository.g.cs");
-        Assert.Contains("public async Task<int> CreateAsync(CreateTagRequest request, CancellationToken cancellationToken)", repo);
-        Assert.Contains("public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken)", repo);
+        Assert.Contains(
+            "public async Task<int> CreateAsync(CreateTagRequest request, CancellationToken cancellationToken)",
+            repo
+        );
+        Assert.Contains(
+            "public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken)",
+            repo
+        );
     }
 }

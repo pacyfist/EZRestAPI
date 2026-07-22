@@ -32,7 +32,8 @@ public class PaginationTests
 
         Assert.Contains(
             "public async Task<PagedResponse<ReadWidgetResponse>> ListAsync(int page, int pageSize, CancellationToken cancellationToken)",
-            repo);
+            repo
+        );
         Assert.Contains(".Skip((page - 1) * pageSize)", repo);
         Assert.Contains(".Take(pageSize)", repo);
         Assert.Contains(".OrderBy(e => e.Id)", repo);

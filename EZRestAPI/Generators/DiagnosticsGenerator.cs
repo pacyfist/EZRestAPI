@@ -157,9 +157,7 @@ public class DiagnosticsGenerator : IIncrementalGenerator
                     ReportPropertyDiagnostics(ctx, model.ModelName, location, model.Properties);
                 }
 
-                var knownSingulars = new HashSet<string>(
-                    models.Select(m => m.Model.SingularName)
-                );
+                var knownSingulars = new HashSet<string>(models.Select(m => m.Model.SingularName));
 
                 foreach (var entry in models)
                 {

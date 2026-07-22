@@ -150,10 +150,7 @@ public class EndpointContractTests
             endpoints
         );
         Assert.Contains("async Task<Results<NoContent, ProblemHttpResult>> (", endpoints);
-        Assert.Contains(
-            "async Task<Results<Ok<ReadTagResponse>, ProblemHttpResult>> (",
-            endpoints
-        );
+        Assert.Contains("async Task<Results<Ok<ReadTagResponse>, ProblemHttpResult>> (", endpoints);
     }
 
     [Fact]
