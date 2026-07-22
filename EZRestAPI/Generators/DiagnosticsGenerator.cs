@@ -83,7 +83,7 @@ public class DiagnosticsGenerator : IIncrementalGenerator
     public static readonly DiagnosticDescriptor UnsupportedNestedShape = new(
         "EZR009",
         "Unsupported container for a nested model",
-        "Property '{0}' on '{1}' holds nested models in an unsupported container; use List<T>, IList<T> or ICollection<T>",
+        "Property '{0}' on '{1}' holds nested models in an unsupported container; use List<T>, IList<T>, ICollection<T>, IReadOnlyList<T> or IReadOnlyCollection<T>",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true
