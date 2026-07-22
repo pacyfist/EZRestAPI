@@ -152,8 +152,24 @@ after independent verification.
 
 ## 7. Follow-ups / unsupported combinations discovered
 
-*(Populated during implementation as the gap policy fires. Empty at design
-time.)*
+**Resolved inline (small fix under the gap policy):** the `Invoice` aggregate's
+`OwnsMany` child-entity collection exposed as `IReadOnlyList<InvoiceLine>` was
+leaking the raw domain entity `InvoiceLine` into `ReadInvoiceResponse` and the
+OpenAPI schema set (no `InvoiceLineDto`), and was **not** mapped as an EF owned
+type. Root cause: `ProviderExtensions.SupportedCollectionTypes` recognized only
+`List<T>`/`IList<T>`/`ICollection<T>`, not the idiomatic DDD read-only
+projection interfaces. Fix: added `IReadOnlyList<T>` and `IReadOnlyCollection<T>`
+to that set, so their nested element resolves to `{Nested}Dto` and the property
+maps as `OwnsMany`. This also repairs the flagship case (any aggregate exposing
+a child-entity collection). Regression tests added in `AggregateReadTests.cs`
+(`ReadResponse_MapsReadOnlyListOfNestedEntity_ToDtoList_NotRawEntity`,
+`DbContext_MapsReadOnlyListOfNestedEntity_AsOwnsMany_NotPrimitiveCollection`);
+the Tier-4 OpenAPI fact was tightened to assert `InvoiceLineDto` and that no
+`InvoiceLine` component leaks. `IReadOnlyList<string>` primitive projections
+(e.g. Order's `Lines`) are unaffected — they stay `PrimitiveCollection` + field
+access. **No outstanding unsupported combinations** — every other tier
+(multi-FK child, 3-level chain, single `OwnsOne`, constructor `[Factory]`)
+generated cleanly with no reduction.
 
 ## 8. Testing gates (recap)
 
