@@ -55,7 +55,7 @@ public class AggregateReadTests
     }
 
     [Fact]
-    public void NoCreateOrUpdateRequestDto_IsGeneratedForAggregate()
+    public void NoUpdateRequestDto_IsGeneratedForAggregate()
     {
         var result = GeneratorHarness.Run(OrderAggregate);
         var hintNames = result
@@ -63,7 +63,8 @@ public class AggregateReadTests
             .Select(s => s.HintName)
             .ToArray();
 
-        Assert.DoesNotContain("CreateOrderRequest.g.cs", hintNames);
+        // Create is generated for aggregates (factory-based, T3); Update is not
+        // — a blind full-replace PUT would bypass the aggregate's invariants.
         Assert.DoesNotContain("UpdateOrderRequest.g.cs", hintNames);
     }
 
@@ -93,12 +94,12 @@ public class AggregateReadTests
     }
 
     [Fact]
-    public void Repository_HasNoCreateOrUpdateMethods()
+    public void Repository_HasNoUpdateMethod()
     {
         var result = GeneratorHarness.Run(OrderAggregate);
         var repo = GeneratorHarness.GetSource(result, "OrderRepository.g.cs");
 
-        Assert.DoesNotContain("CreateAsync(", repo);
+        // T3 adds a factory-based CreateAsync; there is still no UpdateAsync.
         Assert.DoesNotContain("UpdateAsync(", repo);
     }
 
@@ -134,15 +135,14 @@ public class AggregateReadTests
     }
 
     [Fact]
-    public void Endpoints_HaveNoPutAndNoCreatePost()
+    public void Endpoints_HaveNoPutOrUpdate()
     {
         var result = GeneratorHarness.Run(OrderAggregate);
         var endpoints = GeneratorHarness.GetSource(result, "OrderEndpoints.g.cs");
 
-        // No blind PUT and no create POST for an aggregate in this increment.
+        // A factory-based create POST is added in T3, but there is still no
+        // blind PUT / Update for an aggregate (would bypass invariants).
         Assert.DoesNotContain("MapPut", endpoints);
-        Assert.DoesNotContain("MapPost", endpoints);
-        Assert.DoesNotContain(".WithName(\"CreateOrder\")", endpoints);
         Assert.DoesNotContain(".WithName(\"UpdateOrder\")", endpoints);
     }
 

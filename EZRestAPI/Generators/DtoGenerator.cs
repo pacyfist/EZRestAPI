@@ -44,8 +44,9 @@ public class DtoGenerator : IIncrementalGenerator
         );
 
         // Aggregates get a Read response (reused as the paginated list item),
-        // built from the read-only property rule resolved by the provider. No
-        // Create/Update request DTO is emitted here — those belong to T3/T4.
+        // built from the read-only property rule resolved by the provider, plus
+        // a factory-parameter-shaped Create request (T3). No Update request DTO
+        // is emitted — a blind full-replace PUT would bypass invariants (T4+).
         var aggregatesProvider = context.SyntaxProvider.GetAggregates();
 
         context.RegisterSourceOutput(
@@ -73,6 +74,74 @@ public class DtoGenerator : IIncrementalGenerator
                     $"{className}.g.cs",
                     SourceText.From(writer.InnerWriter.ToString(), Encoding.UTF8)
                 );
+
+                // Create request: fields = the resolved factory's parameters
+                // (value objects nested as their {VO}Dto). Only emitted when the
+                // factory is unambiguous (exactly one entry point; else EZR012).
+                if (aggregate.Factory is { } factory)
+                {
+                    var createName = $"Create{aggregate.SingularName}Request";
+
+                    var createWriter = SourceWriter.Create();
+
+                    createWriter.WriteLine($"namespace {aggregate.AssemblyName};");
+                    createWriter.WriteLine();
+                    createWriter.WriteLine($"public class {createName}");
+                    createWriter.WriteLine("{");
+                    createWriter.Indent++;
+                    foreach (var parameter in factory.Parameters)
+                    {
+                        WriteDtoProperty(
+                            createWriter,
+                            parameter.AsProperty(),
+                            emitValidation: true
+                        );
+                    }
+                    createWriter.Indent--;
+                    createWriter.WriteLine("}");
+
+                    ctx.AddSource(
+                        $"{createName}.g.cs",
+                        SourceText.From(createWriter.InnerWriter.ToString(), Encoding.UTF8)
+                    );
+                }
+
+                // Command request: one {Command}{Name}Request per [Command] whose
+                // fields = the command method's parameters (value objects nested
+                // as their {VO}Dto). A parameterless command carries no body, so
+                // no DTO is emitted for it (T4).
+                foreach (var command in aggregate.Commands)
+                {
+                    if (!command.Parameters.Any())
+                    {
+                        continue;
+                    }
+
+                    var commandName = $"{command.MethodName}{aggregate.SingularName}Request";
+
+                    var commandWriter = SourceWriter.Create();
+
+                    commandWriter.WriteLine($"namespace {aggregate.AssemblyName};");
+                    commandWriter.WriteLine();
+                    commandWriter.WriteLine($"public class {commandName}");
+                    commandWriter.WriteLine("{");
+                    commandWriter.Indent++;
+                    foreach (var parameter in command.Parameters)
+                    {
+                        WriteDtoProperty(
+                            commandWriter,
+                            parameter.AsProperty(),
+                            emitValidation: true
+                        );
+                    }
+                    commandWriter.Indent--;
+                    commandWriter.WriteLine("}");
+
+                    ctx.AddSource(
+                        $"{commandName}.g.cs",
+                        SourceText.From(commandWriter.InnerWriter.ToString(), Encoding.UTF8)
+                    );
+                }
             }
         );
 

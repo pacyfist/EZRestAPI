@@ -106,19 +106,34 @@ public static class ProviderExtensions
         string ParameterName,
         bool IsNonNullableReferenceType,
         NestedKind Kind = NestedKind.None,
-        NestedType? Nested = null
-    );
+        NestedType? Nested = null,
+        EquatableArray<string> DataAnnotations = default
+    )
+    {
+        /// <summary>
+        /// Projects a factory/command parameter onto the <see cref="Property"/>
+        /// shape so it can flow through the same DTO emission, nested-mapper and
+        /// <c>ToEntity</c>/<c>ToDto</c> machinery as a [Model] property. The
+        /// parameter name is PascalCased into the DTO property name.
+        /// </summary>
+        public Property AsProperty() =>
+            new(
+                IsRequired: false,
+                TypeName: TypeName,
+                PropertyName: ParameterName.ToPascalCase(),
+                IsNonNullableReferenceType: IsNonNullableReferenceType,
+                Kind: Kind,
+                Nested: Nested,
+                DataAnnotations: DataAnnotations
+            );
+    }
 
     /// <summary>
     /// The single resolved creation entry point of an aggregate: its kind, the
     /// method name (for a static factory) or containing type name (for a
     /// constructor), and its parameters.
     /// </summary>
-    public record FactoryInfo(
-        FactoryKind Kind,
-        string Name,
-        EquatableArray<Parameter> Parameters
-    );
+    public record FactoryInfo(FactoryKind Kind, string Name, EquatableArray<Parameter> Parameters);
 
     /// <summary>
     /// A guarded state-transition method marked [Command]. The route name is
@@ -265,16 +280,14 @@ public static class ProviderExtensions
         }
 
         // First pass: each model's own foreign keys (edges to its parents).
-        var parentEdges =
-            new System.Collections.Generic.Dictionary<
-                string,
-                System.Collections.Generic.List<RelationshipInfo>
-            >();
-        var childEdges =
-            new System.Collections.Generic.Dictionary<
-                string,
-                System.Collections.Generic.List<RelationshipInfo>
-            >();
+        var parentEdges = new System.Collections.Generic.Dictionary<
+            string,
+            System.Collections.Generic.List<RelationshipInfo>
+        >();
+        var childEdges = new System.Collections.Generic.Dictionary<
+            string,
+            System.Collections.Generic.List<RelationshipInfo>
+        >();
 
         foreach (var child in models)
         {
@@ -684,12 +697,24 @@ public static class ProviderExtensions
 
         var (kind, nested) = ResolveNested(parameter.Type, visited);
 
+        var dataAnnotations = new EquatableArray<string>(
+            parameter
+                .GetAttributes()
+                .Where(a =>
+                    a.AttributeClass?.ContainingNamespace?.ToDisplayString()
+                    == "System.ComponentModel.DataAnnotations"
+                )
+                .Select(RenderAttribute)
+                .ToArray()
+        );
+
         return new Parameter(
             TypeName: parameter.Type.ToDisplayString(),
             ParameterName: parameter.Name,
             IsNonNullableReferenceType: isNonNullableReferenceType,
             Kind: kind,
-            Nested: nested
+            Nested: nested,
+            DataAnnotations: dataAnnotations
         );
     }
 
@@ -941,7 +966,9 @@ public static class ProviderExtensions
                 var member = enumType
                     .GetMembers()
                     .OfType<IFieldSymbol>()
-                    .FirstOrDefault(f => f.HasConstantValue && Equals(f.ConstantValue, constant.Value));
+                    .FirstOrDefault(f =>
+                        f.HasConstantValue && Equals(f.ConstantValue, constant.Value)
+                    );
                 return member is not null
                     ? $"{enumType.ToDisplayString()}.{member.Name}"
                     : $"({enumType.ToDisplayString()}){constant.Value}";

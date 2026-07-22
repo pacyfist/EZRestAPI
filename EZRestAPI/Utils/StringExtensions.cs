@@ -171,6 +171,22 @@ public static class StringExtensions
         return builder.ToString();
     }
 
+    /// <summary>
+    /// Upper-cases the first character of an identifier so a factory/command
+    /// parameter name ("customer") becomes a PascalCase DTO property name
+    /// ("Customer"). Parameter names are already valid camelCase identifiers,
+    /// so only the leading character needs adjusting.
+    /// </summary>
+    public static string ToPascalCase(this string value)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        return char.ToUpperInvariant(value[0]) + value.Substring(1);
+    }
+
     public static string ToCleanNamespace(this string value)
     {
         if (string.IsNullOrEmpty(value))

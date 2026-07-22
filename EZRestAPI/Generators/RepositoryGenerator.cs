@@ -466,6 +466,59 @@ public class RepositoryGenerator : IIncrementalGenerator
 
     // ---- Aggregate repository (reads + delete; T2 scope) ------------------
 
+    /// <summary>
+    /// Emits the aggregate's factory-based create method. The request DTO's
+    /// (factory-parameter-shaped) fields are mapped back to factory arguments
+    /// and the factory is INVOKED directly — a static method
+    /// (<c>Order.Place(args)</c>) or a constructor (<c>new Order(args)</c>).
+    /// The aggregate is never object-initialized, so its private setters and
+    /// invariants stay owned by the domain type. The created aggregate is then
+    /// mapped to its Read response.
+    /// </summary>
+    private static void InsertAggregateCreateMethod(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate,
+        ProviderExtensions.FactoryInfo factory
+    )
+    {
+        var arguments = string.Join(
+            ", ",
+            factory.Parameters.Select(p =>
+                p.AsProperty().ToEntityExpression($"request.{p.ParameterName.ToPascalCase()}")
+            )
+        );
+
+        var invocation =
+            factory.Kind == ProviderExtensions.FactoryKind.StaticMethod
+                ? $"{aggregate.ClassName}.{factory.Name}({arguments})"
+                : $"new {aggregate.ClassName}({arguments})";
+
+        writer.WriteLine(
+            $"public async Task<Read{aggregate.SingularName}Response> CreateAsync(Create{aggregate.SingularName}Request request, CancellationToken cancellationToken)"
+        );
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine($"var entity = {invocation};");
+        writer.WriteLine();
+        writer.WriteLine($"context.{aggregate.PluralName}.Add(entity);");
+        writer.WriteLine("await context.SaveChangesAsync(cancellationToken);");
+        writer.WriteLine();
+        writer.WriteLine($"return new Read{aggregate.SingularName}Response()");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("Id = entity.Id,");
+        foreach (var property in aggregate.Properties)
+        {
+            writer.WriteLine(
+                $"{property.PropertyName} = {property.ToDtoExpression($"entity.{property.PropertyName}")},"
+            );
+        }
+        writer.Indent--;
+        writer.WriteLine("};");
+        writer.Indent--;
+        writer.WriteLine("}");
+    }
+
     private static void InsertAggregateReadMethod(
         IndentedTextWriter writer,
         ProviderExtensions.Aggregate aggregate
@@ -588,6 +641,68 @@ public class RepositoryGenerator : IIncrementalGenerator
         writer.WriteLine("}");
     }
 
+    /// <summary>
+    /// Emits one <c>Execute{Command}Async</c> per [Command]. The aggregate is
+    /// loaded <b>tracked</b> (<c>FirstOrDefaultAsync</c>, never
+    /// <c>AsNoTracking</c>) so the invariant-guarded method mutates a tracked
+    /// entity that <c>SaveChangesAsync</c> then persists. A missing aggregate is
+    /// signalled as a null response; the guarded method may throw, and that
+    /// exception propagates to the endpoint's exception → status mapping. On
+    /// success the mutated aggregate is mapped back to its Read representation.
+    /// </summary>
+    private static void InsertAggregateCommandMethod(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate,
+        ProviderExtensions.CommandInfo command
+    )
+    {
+        var hasRequest = command.Parameters.Any();
+        var requestType = $"{command.MethodName}{aggregate.SingularName}Request";
+
+        writer.WriteLine(
+            hasRequest
+                ? $"public async Task<Read{aggregate.SingularName}Response?> Execute{command.MethodName}Async(int id, {requestType} request, CancellationToken cancellationToken)"
+                : $"public async Task<Read{aggregate.SingularName}Response?> Execute{command.MethodName}Async(int id, CancellationToken cancellationToken)"
+        );
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine(
+            $"var entity = await context.{aggregate.PluralName}.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);"
+        );
+        writer.WriteLine();
+        writer.WriteLine("if (entity is null)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("return null;");
+        writer.Indent--;
+        writer.WriteLine("}");
+        writer.WriteLine();
+
+        var arguments = string.Join(
+            ", ",
+            command.Parameters.Select(p =>
+                p.AsProperty().ToEntityExpression($"request.{p.ParameterName.ToPascalCase()}")
+            )
+        );
+        writer.WriteLine($"entity.{command.MethodName}({arguments});");
+        writer.WriteLine("await context.SaveChangesAsync(cancellationToken);");
+        writer.WriteLine();
+        writer.WriteLine($"return new Read{aggregate.SingularName}Response()");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("Id = entity.Id,");
+        foreach (var property in aggregate.Properties)
+        {
+            writer.WriteLine(
+                $"{property.PropertyName} = {property.ToDtoExpression($"entity.{property.PropertyName}")},"
+            );
+        }
+        writer.Indent--;
+        writer.WriteLine("};");
+        writer.Indent--;
+        writer.WriteLine("}");
+    }
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModelsWithRelationships();
@@ -654,11 +769,21 @@ public class RepositoryGenerator : IIncrementalGenerator
                 );
                 writer.WriteLine("{");
                 writer.Indent++;
+                if (aggregate.Factory is { } factory)
+                {
+                    InsertAggregateCreateMethod(writer, aggregate, factory);
+                    writer.WriteLine();
+                }
                 InsertAggregateReadMethod(writer, aggregate);
                 writer.WriteLine();
                 InsertAggregateListMethod(writer, aggregate);
                 writer.WriteLine();
                 InsertAggregateDeleteMethod(writer, aggregate);
+                foreach (var command in aggregate.Commands)
+                {
+                    writer.WriteLine();
+                    InsertAggregateCommandMethod(writer, aggregate, command);
+                }
                 writer.Indent--;
                 writer.WriteLine("}");
 

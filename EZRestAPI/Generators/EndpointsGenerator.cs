@@ -516,6 +516,42 @@ public class EndpointsGenerator : IIncrementalGenerator
 
     // ---- Aggregate endpoints (read/list/delete; T2 scope) ----------------
 
+    /// <summary>
+    /// Emits the aggregate's factory-based create endpoint: <c>POST /{plural}</c>
+    /// validating the request (422 via <see cref="EmitValidationGuard"/>),
+    /// invoking the repository's factory-based <c>CreateAsync</c>, and returning
+    /// 201 + a flat <c>/{plural}/{id}</c> Location with the Read representation
+    /// of the created aggregate. Uses the same union / ProblemDetails / metadata
+    /// conventions as every other write endpoint.
+    /// </summary>
+    private static void InsertAggregateCreateEndpoint(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate
+    )
+    {
+        var route = aggregate.PluralName.ToLowerInvariant();
+
+        writer.WriteLine(
+            $"group.MapPost(\"/\", async Task<Results<Created<Read{aggregate.SingularName}Response>, ProblemHttpResult>> ("
+        );
+        writer.Indent++;
+        writer.WriteLine($"[FromServices] {aggregate.SingularName}Repository repository,");
+        writer.WriteLine($"[FromBody] Create{aggregate.SingularName}Request request,");
+        writer.WriteLine("CancellationToken cancellationToken) =>");
+        writer.Indent--;
+        writer.WriteLine("{");
+        writer.Indent++;
+        EmitValidationGuard(writer);
+        writer.WriteLine(
+            "var response = await repository.CreateAsync(request, cancellationToken);"
+        );
+        writer.WriteLine();
+        writer.WriteLine($"return TypedResults.Created($\"/{route}/{{response.Id}}\", response);");
+        writer.Indent--;
+        writer.WriteLine("})");
+        EmitMetadata(writer, $"Create{aggregate.SingularName}", aggregate.PluralName, 422);
+    }
+
     private static void InsertAggregateListEndpoint(
         IndentedTextWriter writer,
         ProviderExtensions.Aggregate aggregate
@@ -608,6 +644,92 @@ public class EndpointsGenerator : IIncrementalGenerator
         EmitMetadata(writer, $"Delete{aggregate.SingularName}", aggregate.PluralName, 404);
     }
 
+    /// <summary>
+    /// Emits an aggregate command endpoint: <c>POST /{plural}/{id}/{command}</c>
+    /// where <c>{command}</c> is the [Command] route override or the kebab-cased
+    /// method name. The handler loads/mutates the aggregate through the tracked
+    /// <c>Execute{Command}Async</c> repository method inside a try/catch that
+    /// maps the domain guard's exception to a status:
+    /// <list type="bullet">
+    ///   <item><c>System.ArgumentException</c> (and subclasses, e.g.
+    ///   <c>ArgumentOutOfRangeException</c>) → 422 ProblemDetails.</item>
+    ///   <item><c>System.InvalidOperationException</c> → 409 ProblemDetails.</item>
+    /// </list>
+    /// The <c>ArgumentException</c> arm is written first so a subclass never
+    /// escapes into a broader arm and <c>InvalidOperationException</c> is never
+    /// swallowed by it; anything else propagates (500). A missing aggregate
+    /// (null response) is 404; success is 200 + the mutated Read representation.
+    /// </summary>
+    private static void InsertAggregateCommandEndpoint(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate,
+        ProviderExtensions.CommandInfo command
+    )
+    {
+        var hasRequest = command.Parameters.Any();
+        var operationId = $"{command.MethodName}{aggregate.SingularName}";
+
+        writer.WriteLine(
+            $"group.MapPost(\"/{{id:int}}/{command.RouteName}\", async Task<Results<Ok<Read{aggregate.SingularName}Response>, ProblemHttpResult>> ("
+        );
+        writer.Indent++;
+        writer.WriteLine($"[FromServices] {aggregate.SingularName}Repository repository,");
+        writer.WriteLine("int id,");
+        if (hasRequest)
+        {
+            writer.WriteLine(
+                $"[FromBody] {command.MethodName}{aggregate.SingularName}Request request,"
+            );
+        }
+        writer.WriteLine("CancellationToken cancellationToken) =>");
+        writer.Indent--;
+        writer.WriteLine("{");
+        writer.Indent++;
+        if (hasRequest)
+        {
+            EmitValidationGuard(writer);
+        }
+        writer.WriteLine($"Read{aggregate.SingularName}Response? response;");
+        writer.WriteLine("try");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine(
+            hasRequest
+                ? $"response = await repository.Execute{command.MethodName}Async(id, request, cancellationToken);"
+                : $"response = await repository.Execute{command.MethodName}Async(id, cancellationToken);"
+        );
+        writer.Indent--;
+        writer.WriteLine("}");
+        // ArgumentException (and its subclasses) maps to 422 and MUST be caught
+        // before the InvalidOperationException arm.
+        writer.WriteLine("catch (System.ArgumentException ex)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("return EZRestAPIProblems.Unprocessable(ex.Message);");
+        writer.Indent--;
+        writer.WriteLine("}");
+        writer.WriteLine("catch (System.InvalidOperationException ex)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("return EZRestAPIProblems.Conflict(ex.Message);");
+        writer.Indent--;
+        writer.WriteLine("}");
+        writer.WriteLine();
+        writer.WriteLine("if (response is null)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine(
+            $"return EZRestAPIProblems.NotFound($\"No {aggregate.SingularName} with id {{id}} exists.\");"
+        );
+        writer.Indent--;
+        writer.WriteLine("}");
+        writer.WriteLine();
+        writer.WriteLine("return TypedResults.Ok(response);");
+        writer.Indent--;
+        writer.WriteLine("})");
+        EmitMetadata(writer, operationId, aggregate.PluralName, 404, 409, 422);
+    }
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModelsWithRelationships();
@@ -696,9 +818,19 @@ public class EndpointsGenerator : IIncrementalGenerator
                 writer.WriteLine();
                 InsertAggregateListEndpoint(writer, aggregate);
                 writer.WriteLine();
+                if (aggregate.Factory is not null)
+                {
+                    InsertAggregateCreateEndpoint(writer, aggregate);
+                    writer.WriteLine();
+                }
                 InsertAggregateReadEndpoint(writer, aggregate);
                 writer.WriteLine();
                 InsertAggregateDeleteEndpoint(writer, aggregate);
+                foreach (var command in aggregate.Commands)
+                {
+                    writer.WriteLine();
+                    InsertAggregateCommandEndpoint(writer, aggregate, command);
+                }
                 writer.WriteLine();
                 writer.WriteLine("return app;");
                 writer.Indent--;
