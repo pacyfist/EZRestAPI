@@ -79,6 +79,58 @@ public class OpenApiDocumentTests : IDisposable
         );
     }
 
+    [Fact]
+    public async Task OpenApiDocument_DescribesAggregateContract()
+    {
+        var response = await client.GetAsync("/openapi/v1.json");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        await using var stream = await response.Content.ReadAsStreamAsync();
+        using var document = await JsonDocument.ParseAsync(stream);
+        var root = document.RootElement;
+        var paths = root.GetProperty("paths");
+
+        // Factory-based creation: POST /orders -> 201 (created) and 422
+        // (the request DTO failed validation).
+        var createOrder = Operation(paths, "/orders", "post");
+        var createResponses = createOrder.GetProperty("responses");
+        Assert.True(createResponses.TryGetProperty("201", out _));
+        AssertValidationResponse(root, createResponses, "422");
+
+        // GET /orders (paginated list) and GET /orders/{id} (single read + 404).
+        var listOrders = Operation(paths, "/orders", "get");
+        Assert.True(listOrders.GetProperty("responses").TryGetProperty("200", out _));
+
+        var readOrder = Operation(paths, "/orders/{id}", "get");
+        var readResponses = readOrder.GetProperty("responses");
+        Assert.True(readResponses.TryGetProperty("200", out _));
+        AssertProblemResponse(readResponses, "404");
+
+        // DELETE /orders/{id} -> 204 (deleted) and 404 (missing).
+        var deleteOrder = Operation(paths, "/orders/{id}", "delete");
+        var deleteResponses = deleteOrder.GetProperty("responses");
+        Assert.True(deleteResponses.TryGetProperty("204", out _));
+        AssertProblemResponse(deleteResponses, "404");
+
+        // Guarded transitions are command sub-resources, NOT a status PUT. The
+        // InvalidOperationException guard surfaces as 409; the ArgumentException
+        // guard surfaces as 422.
+        var cancelOrder = Operation(paths, "/orders/{id}/cancel", "post");
+        AssertProblemResponse(cancelOrder.GetProperty("responses"), "409");
+
+        var addLineOrder = Operation(paths, "/orders/{id}/add-line", "post");
+        var addLineResponses = addLineOrder.GetProperty("responses");
+        AssertProblemResponse(addLineResponses, "409");
+        AssertValidationResponse(root, addLineResponses, "422");
+
+        // No blind PUT for an aggregate: a full-replace would bypass invariants.
+        Assert.True(paths.TryGetProperty("/orders/{id}", out var orderItem));
+        Assert.False(
+            orderItem.TryGetProperty("put", out _),
+            "Aggregate must not expose PUT /orders/{id}."
+        );
+    }
+
     private static JsonElement Operation(JsonElement paths, string path, string verb)
     {
         Assert.True(paths.TryGetProperty(path, out var item), $"Missing path {path}.");
@@ -92,7 +144,10 @@ public class OpenApiDocumentTests : IDisposable
     /// </summary>
     private static void AssertProblemResponse(JsonElement responses, string status)
     {
-        Assert.True(responses.TryGetProperty(status, out var response), $"Missing {status} response.");
+        Assert.True(
+            responses.TryGetProperty(status, out var response),
+            $"Missing {status} response."
+        );
         Assert.True(
             response.TryGetProperty("content", out var content),
             $"{status} response has no content."
@@ -110,11 +165,20 @@ public class OpenApiDocumentTests : IDisposable
     /// its schema (whether referenced or inline) documents the `errors` field-map
     /// — so a generated client can type the per-field validation messages.
     /// </summary>
-    private static void AssertValidationResponse(JsonElement root, JsonElement responses, string status)
+    private static void AssertValidationResponse(
+        JsonElement root,
+        JsonElement responses,
+        string status
+    )
     {
-        Assert.True(responses.TryGetProperty(status, out var response), $"Missing {status} response.");
         Assert.True(
-            response.GetProperty("content").TryGetProperty("application/problem+json", out var media),
+            responses.TryGetProperty(status, out var response),
+            $"Missing {status} response."
+        );
+        Assert.True(
+            response
+                .GetProperty("content")
+                .TryGetProperty("application/problem+json", out var media),
             $"{status} response is not application/problem+json."
         );
         var schema = media.GetProperty("schema");

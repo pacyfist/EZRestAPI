@@ -44,6 +44,11 @@ public partial class Order
             throw new System.InvalidOperationException("Cannot cancel a shipped order.");
         }
 
+        if (Status == "Cancelled")
+        {
+            throw new System.InvalidOperationException("Order is already cancelled.");
+        }
+
         Status = "Cancelled";
     }
 
