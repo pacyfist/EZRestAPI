@@ -12,19 +12,33 @@ public class BootstrapGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModels().Collect();
+        var aggregatesProvider = context.SyntaxProvider.GetAggregates().Collect();
+        var combined = modelsProvider.Combine(aggregatesProvider);
 
         context.RegisterSourceOutput(
-            modelsProvider,
-            (ctx, models) =>
+            combined,
+            (ctx, pair) =>
             {
-                if (models.IsDefaultOrEmpty)
+                var (models, aggregates) = pair;
+
+                if (models.IsDefaultOrEmpty && aggregates.IsDefaultOrEmpty)
                 {
                     return;
                 }
 
+                var assemblyName = models.IsDefaultOrEmpty
+                    ? aggregates.First().AssemblyName
+                    : models.First().AssemblyName;
+
+                // Both kinds expose a `{Singular}Repository` + `Map{Singular}Endpoints`.
+                var repositoryNames = models
+                    .Select(m => m.SingularName)
+                    .Concat(aggregates.Select(a => a.SingularName))
+                    .ToArray();
+
                 var writer = SourceWriter.Create();
 
-                writer.WriteLine($"namespace {models.First().AssemblyName};");
+                writer.WriteLine($"namespace {assemblyName};");
                 writer.WriteLine();
                 writer.WriteLine("using Microsoft.AspNetCore.Routing;");
                 writer.WriteLine("using Microsoft.Extensions.DependencyInjection;");
@@ -37,9 +51,9 @@ public class BootstrapGenerator : IIncrementalGenerator
                 );
                 writer.WriteLine("{");
                 writer.Indent++;
-                foreach (var model in models)
+                foreach (var name in repositoryNames)
                 {
-                    writer.WriteLine($"services.AddScoped<{model.SingularName}Repository>();");
+                    writer.WriteLine($"services.AddScoped<{name}Repository>();");
                 }
                 writer.WriteLine();
                 writer.WriteLine("services.AddProblemDetails();");
@@ -53,9 +67,9 @@ public class BootstrapGenerator : IIncrementalGenerator
                 );
                 writer.WriteLine("{");
                 writer.Indent++;
-                foreach (var model in models)
+                foreach (var name in repositoryNames)
                 {
-                    writer.WriteLine($"app.Map{model.SingularName}Endpoints();");
+                    writer.WriteLine($"app.Map{name}Endpoints();");
                 }
                 writer.WriteLine();
                 writer.WriteLine("return app;");

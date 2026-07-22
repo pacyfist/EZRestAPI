@@ -288,9 +288,7 @@ public class RepositoryGenerator : IIncrementalGenerator
         writer.WriteLine(".ToListAsync(cancellationToken);");
         writer.Indent--;
         writer.WriteLine();
-        writer.WriteLine(
-            $"var items = new System.Collections.Generic.List<{childResponse}>();"
-        );
+        writer.WriteLine($"var items = new System.Collections.Generic.List<{childResponse}>();");
         writer.WriteLine("foreach (var entity in entities)");
         writer.WriteLine("{");
         writer.Indent++;
@@ -466,6 +464,130 @@ public class RepositoryGenerator : IIncrementalGenerator
         writer.WriteLine("}");
     }
 
+    // ---- Aggregate repository (reads + delete; T2 scope) ------------------
+
+    private static void InsertAggregateReadMethod(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate
+    )
+    {
+        writer.WriteLine(
+            $"public async Task<Read{aggregate.SingularName}Response?> ReadAsync(int id, CancellationToken cancellationToken)"
+        );
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine(
+            $"var entity = await context.{aggregate.PluralName}.AsNoTracking().FirstOrDefaultAsync(s => s.Id == id, cancellationToken);"
+        );
+        writer.WriteLine();
+        writer.WriteLine("if (entity is null)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("return null;");
+        writer.Indent--;
+        writer.WriteLine("}");
+        writer.WriteLine();
+        writer.WriteLine($"return new Read{aggregate.SingularName}Response()");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("Id = entity.Id,");
+        foreach (var property in aggregate.Properties)
+        {
+            writer.WriteLine(
+                $"{property.PropertyName} = {property.ToDtoExpression($"entity.{property.PropertyName}")},"
+            );
+        }
+        writer.Indent--;
+        writer.WriteLine("};");
+        writer.Indent--;
+        writer.WriteLine("}");
+    }
+
+    private static void InsertAggregateListMethod(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate
+    )
+    {
+        writer.WriteLine(
+            $"public async Task<PagedResponse<Read{aggregate.SingularName}Response>> ListAsync(int page, int pageSize, CancellationToken cancellationToken)"
+        );
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine(
+            $"var query = context.{aggregate.PluralName}.AsNoTracking().OrderBy(e => e.Id);"
+        );
+        writer.WriteLine("var totalCount = await query.CountAsync(cancellationToken);");
+        writer.WriteLine("var entities = await query");
+        writer.Indent++;
+        writer.WriteLine(".Skip((page - 1) * pageSize)");
+        writer.WriteLine(".Take(pageSize)");
+        writer.WriteLine(".ToListAsync(cancellationToken);");
+        writer.Indent--;
+        writer.WriteLine();
+        writer.WriteLine(
+            $"var items = new System.Collections.Generic.List<Read{aggregate.SingularName}Response>();"
+        );
+        writer.WriteLine("foreach (var entity in entities)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine($"items.Add(new Read{aggregate.SingularName}Response()");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("Id = entity.Id,");
+        foreach (var property in aggregate.Properties)
+        {
+            writer.WriteLine(
+                $"{property.PropertyName} = {property.ToDtoExpression($"entity.{property.PropertyName}")},"
+            );
+        }
+        writer.Indent--;
+        writer.WriteLine("});");
+        writer.Indent--;
+        writer.WriteLine("}");
+        writer.WriteLine();
+        writer.WriteLine($"return new PagedResponse<Read{aggregate.SingularName}Response>()");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("Items = items,");
+        writer.WriteLine("TotalCount = totalCount,");
+        writer.WriteLine("Page = page,");
+        writer.WriteLine("PageSize = pageSize,");
+        writer.Indent--;
+        writer.WriteLine("};");
+        writer.Indent--;
+        writer.WriteLine("}");
+    }
+
+    private static void InsertAggregateDeleteMethod(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate
+    )
+    {
+        // Load + Remove + SaveChanges (not ExecuteDelete) so EF cascades the
+        // aggregate's owned value objects / child entities in the same unit.
+        writer.WriteLine(
+            "public async Task<bool> DeleteAsync(int id, CancellationToken cancellationToken)"
+        );
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine(
+            $"var entity = await context.{aggregate.PluralName}.FirstOrDefaultAsync(e => e.Id == id, cancellationToken);"
+        );
+        writer.WriteLine();
+        writer.WriteLine("if (entity is null)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("return false;");
+        writer.Indent--;
+        writer.WriteLine("}");
+        writer.WriteLine();
+        writer.WriteLine($"context.{aggregate.PluralName}.Remove(entity);");
+        writer.WriteLine("await context.SaveChangesAsync(cancellationToken);");
+        writer.WriteLine("return true;");
+        writer.Indent--;
+        writer.WriteLine("}");
+    }
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModelsWithRelationships();
@@ -507,6 +629,41 @@ public class RepositoryGenerator : IIncrementalGenerator
 
                 ctx.AddSource(
                     $"{model.SingularName}Repository.g.cs",
+                    SourceText.From(writer.InnerWriter.ToString(), Encoding.UTF8)
+                );
+            }
+        );
+
+        var aggregatesProvider = context.SyntaxProvider.GetAggregates();
+
+        context.RegisterSourceOutput(
+            aggregatesProvider,
+            (ctx, aggregate) =>
+            {
+                var writer = SourceWriter.Create();
+
+                writer.WriteLine($"namespace {aggregate.AssemblyName};");
+                writer.WriteLine();
+                writer.WriteLine("using System.Linq;");
+                writer.WriteLine("using System.Threading;");
+                writer.WriteLine("using System.Threading.Tasks;");
+                writer.WriteLine("using Microsoft.EntityFrameworkCore;");
+                writer.WriteLine();
+                writer.WriteLine(
+                    $"public partial class {aggregate.SingularName}Repository(CustomDbContext context)"
+                );
+                writer.WriteLine("{");
+                writer.Indent++;
+                InsertAggregateReadMethod(writer, aggregate);
+                writer.WriteLine();
+                InsertAggregateListMethod(writer, aggregate);
+                writer.WriteLine();
+                InsertAggregateDeleteMethod(writer, aggregate);
+                writer.Indent--;
+                writer.WriteLine("}");
+
+                ctx.AddSource(
+                    $"{aggregate.SingularName}Repository.g.cs",
                     SourceText.From(writer.InnerWriter.ToString(), Encoding.UTF8)
                 );
             }

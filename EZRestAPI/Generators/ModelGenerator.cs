@@ -25,25 +25,60 @@ public class ModelGenerator : IIncrementalGenerator
                     return;
                 }
 
-                var writer = SourceWriter.Create();
-
-                writer.WriteLine($"namespace {model.ModelNamespace.ToCleanNamespace()};");
-                writer.WriteLine();
-                writer.WriteLine("using System.ComponentModel.DataAnnotations;");
-                writer.WriteLine();
-                writer.WriteLine($"public partial class {model.ModelName}");
-                writer.WriteLine("{");
-                writer.Indent++;
-                writer.WriteLine("[Key]");
-                writer.WriteLine("public int Id { get; set; }");
-                writer.Indent--;
-                writer.WriteLine("}");
-
-                ctx.AddSource(
-                    $"{model.ModelName}.g.cs",
-                    SourceText.From(writer.InnerWriter.ToString(), Encoding.UTF8)
+                EmitIdPartial(
+                    ctx,
+                    model.ModelNamespace,
+                    model.ModelName,
+                    // Anemic models are object-initialized, so the key needs a
+                    // public setter like every other property.
+                    "public int Id { get; set; }",
+                    $"{model.ModelName}.g.cs"
                 );
             }
         );
+
+        var aggregatesProvider = context.SyntaxProvider.GetAggregates();
+
+        context.RegisterSourceOutput(
+            aggregatesProvider,
+            (ctx, aggregate) =>
+            {
+                // The aggregate is never object-initialized from generated
+                // code, so EF materializes the key through a private setter,
+                // keeping invariants encapsulated.
+                EmitIdPartial(
+                    ctx,
+                    aggregate.ModelNamespace,
+                    aggregate.ModelName,
+                    "public int Id { get; private set; }",
+                    $"{aggregate.ModelName}.Id.g.cs"
+                );
+            }
+        );
+    }
+
+    private static void EmitIdPartial(
+        SourceProductionContext ctx,
+        string modelNamespace,
+        string modelName,
+        string idLine,
+        string hintName
+    )
+    {
+        var writer = SourceWriter.Create();
+
+        writer.WriteLine($"namespace {modelNamespace.ToCleanNamespace()};");
+        writer.WriteLine();
+        writer.WriteLine("using System.ComponentModel.DataAnnotations;");
+        writer.WriteLine();
+        writer.WriteLine($"public partial class {modelName}");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("[Key]");
+        writer.WriteLine(idLine);
+        writer.Indent--;
+        writer.WriteLine("}");
+
+        ctx.AddSource(hintName, SourceText.From(writer.InnerWriter.ToString(), Encoding.UTF8));
     }
 }

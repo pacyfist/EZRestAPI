@@ -43,6 +43,39 @@ public class DtoGenerator : IIncrementalGenerator
             emitValidation: true
         );
 
+        // Aggregates get a Read response (reused as the paginated list item),
+        // built from the read-only property rule resolved by the provider. No
+        // Create/Update request DTO is emitted here — those belong to T3/T4.
+        var aggregatesProvider = context.SyntaxProvider.GetAggregates();
+
+        context.RegisterSourceOutput(
+            aggregatesProvider,
+            (ctx, aggregate) =>
+            {
+                var className = $"Read{aggregate.SingularName}Response";
+
+                var writer = SourceWriter.Create();
+
+                writer.WriteLine($"namespace {aggregate.AssemblyName};");
+                writer.WriteLine();
+                writer.WriteLine($"public class {className}");
+                writer.WriteLine("{");
+                writer.Indent++;
+                writer.WriteLine("public int? Id { get; set; }");
+                foreach (var property in aggregate.Properties)
+                {
+                    WriteDtoProperty(writer, property, emitValidation: false);
+                }
+                writer.Indent--;
+                writer.WriteLine("}");
+
+                ctx.AddSource(
+                    $"{className}.g.cs",
+                    SourceText.From(writer.InnerWriter.ToString(), Encoding.UTF8)
+                );
+            }
+        );
+
         var relModelsProvider = context.SyntaxProvider.GetModelsWithRelationships();
 
         context.RegisterSourceOutput(

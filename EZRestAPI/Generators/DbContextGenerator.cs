@@ -40,22 +40,74 @@ public class DbContextGenerator : IIncrementalGenerator
         writer.WriteLine("});");
     }
 
+    /// <summary>
+    /// True when a read property is a get-only <c>IReadOnlyList&lt;T&gt;</c>
+    /// projection over a private backing field: EF cannot use the (setter-less)
+    /// property, so it is mapped through the field via <c>PropertyAccessMode.Field</c>.
+    /// </summary>
+    private static bool IsReadOnlyListProjection(ProviderExtensions.Property property) =>
+        property.Kind == ProviderExtensions.NestedKind.None
+        && property.TypeName.StartsWith(
+            "System.Collections.Generic.IReadOnlyList<",
+            System.StringComparison.Ordinal
+        );
+
+    private static bool AggregateNeedsConfig(ProviderExtensions.Aggregate aggregate) =>
+        aggregate.Properties.Any(p =>
+            p.Kind != ProviderExtensions.NestedKind.None || IsReadOnlyListProjection(p)
+        );
+
+    private static void InsertAggregateConfiguration(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate
+    )
+    {
+        writer.WriteLine();
+        writer.WriteLine($"modelBuilder.Entity<{aggregate.ClassName}>(entity =>");
+        writer.WriteLine("{");
+        writer.Indent++;
+        foreach (var property in aggregate.Properties)
+        {
+            if (property.Kind != ProviderExtensions.NestedKind.None)
+            {
+                // Value objects / child entities map as owned types.
+                InsertOwnedConfiguration(writer, "entity", property, 1);
+            }
+            else if (IsReadOnlyListProjection(property))
+            {
+                writer.WriteLine(
+                    $"entity.PrimitiveCollection(e => e.{property.PropertyName}).UsePropertyAccessMode(Microsoft.EntityFrameworkCore.PropertyAccessMode.Field);"
+                );
+            }
+        }
+        writer.Indent--;
+        writer.WriteLine("});");
+    }
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModelsWithRelationships().Collect();
+        var aggregatesProvider = context.SyntaxProvider.GetAggregates().Collect();
+        var combined = modelsProvider.Combine(aggregatesProvider);
 
         context.RegisterSourceOutput(
-            modelsProvider,
-            (ctx, models) =>
+            combined,
+            (ctx, pair) =>
             {
-                if (models.IsDefaultOrEmpty)
+                var (models, aggregates) = pair;
+
+                if (models.IsDefaultOrEmpty && aggregates.IsDefaultOrEmpty)
                 {
                     return;
                 }
 
+                var assemblyName = models.IsDefaultOrEmpty
+                    ? aggregates.First().AssemblyName
+                    : models.First().AssemblyName;
+
                 var writer = SourceWriter.Create();
 
-                writer.WriteLine($"namespace {models.First().AssemblyName};");
+                writer.WriteLine($"namespace {assemblyName};");
                 writer.WriteLine();
                 writer.WriteLine("using Microsoft.EntityFrameworkCore;");
                 writer.WriteLine();
@@ -79,6 +131,14 @@ public class DbContextGenerator : IIncrementalGenerator
                     );
                 }
 
+                // Aggregates get a DbSet and participate exactly like a [Model].
+                foreach (var aggregate in aggregates)
+                {
+                    writer.WriteLine(
+                        $"public DbSet<{aggregate.ClassName}> {aggregate.PluralName} {{ get; set; }} = null!;"
+                    );
+                }
+
                 var modelsWithNested = models
                     .Where(m => m.Properties.Any(p => p.Kind != ProviderExtensions.NestedKind.None))
                     .ToList();
@@ -87,7 +147,13 @@ public class DbContextGenerator : IIncrementalGenerator
                     .Where(m => m.ParentRelationships.Any())
                     .ToList();
 
-                if (modelsWithNested.Count > 0 || modelsWithRelationships.Count > 0)
+                var aggregatesWithConfig = aggregates.Where(AggregateNeedsConfig).ToList();
+
+                if (
+                    modelsWithNested.Count > 0
+                    || modelsWithRelationships.Count > 0
+                    || aggregatesWithConfig.Count > 0
+                )
                 {
                     writer.WriteLine();
                     writer.WriteLine(
@@ -124,10 +190,17 @@ public class DbContextGenerator : IIncrementalGenerator
                             writer.Indent++;
                             writer.WriteLine($".HasOne<{rel.ParentClassName}>()");
                             writer.WriteLine(".WithMany()");
-                            writer.WriteLine($".HasForeignKey(e => e.{rel.ForeignKeyPropertyName})");
+                            writer.WriteLine(
+                                $".HasForeignKey(e => e.{rel.ForeignKeyPropertyName})"
+                            );
                             writer.WriteLine(".OnDelete(DeleteBehavior.Restrict);");
                             writer.Indent--;
                         }
+                    }
+
+                    foreach (var aggregate in aggregatesWithConfig)
+                    {
+                        InsertAggregateConfiguration(writer, aggregate);
                     }
 
                     writer.Indent--;

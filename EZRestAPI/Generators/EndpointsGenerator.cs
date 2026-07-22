@@ -80,7 +80,9 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.Indent++;
         writer.WriteLine("Status = StatusCodes.Status422UnprocessableEntity,");
         writer.WriteLine("Title = \"One or more validation errors occurred.\",");
-        writer.WriteLine("Detail = \"One or more fields failed validation; see 'errors' for details.\",");
+        writer.WriteLine(
+            "Detail = \"One or more fields failed validation; see 'errors' for details.\","
+        );
         writer.Indent--;
         writer.WriteLine("};");
         writer.WriteLine("problem.Extensions[\"code\"] = \"unprocessableEntity\";");
@@ -322,8 +324,7 @@ public class EndpointsGenerator : IIncrementalGenerator
         var childRoute = rel.ChildPluralName.ToLowerInvariant();
         var name = $"{rel.ChildSingularName}Under{rel.ParentSingularName}";
         var tag = rel.ChildPluralName;
-        var groupVar =
-            $"{rel.ParentSingularName.ToLowerInvariant()}{rel.ChildSingularName}Group";
+        var groupVar = $"{rel.ParentSingularName.ToLowerInvariant()}{rel.ChildSingularName}Group";
         var createRequest = $"Create{name}Request";
         var updateRequest = $"Update{name}Request";
 
@@ -513,6 +514,100 @@ public class EndpointsGenerator : IIncrementalGenerator
         EmitMetadata(writer, $"Delete{name}", tag, 404, 409);
     }
 
+    // ---- Aggregate endpoints (read/list/delete; T2 scope) ----------------
+
+    private static void InsertAggregateListEndpoint(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate
+    )
+    {
+        writer.WriteLine(
+            $"group.MapGet(\"/\", async Task<Results<Ok<PagedResponse<Read{aggregate.SingularName}Response>>, ProblemHttpResult>> ("
+        );
+        writer.Indent++;
+        writer.WriteLine($"[FromServices] {aggregate.SingularName}Repository repository,");
+        writer.WriteLine("[FromQuery] int page = 1,");
+        writer.WriteLine("[FromQuery] int pageSize = 20,");
+        writer.WriteLine("CancellationToken cancellationToken = default) =>");
+        writer.Indent--;
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("if (page < 1 || pageSize < 1)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine(
+            "return EZRestAPIProblems.Unprocessable(\"page and pageSize must be >= 1.\");"
+        );
+        writer.Indent--;
+        writer.WriteLine("}");
+        writer.WriteLine("pageSize = System.Math.Min(pageSize, 100);");
+        writer.WriteLine();
+        writer.WriteLine(
+            "var response = await repository.ListAsync(page, pageSize, cancellationToken);"
+        );
+        writer.WriteLine("return TypedResults.Ok(response);");
+        writer.Indent--;
+        writer.WriteLine("})");
+        EmitMetadata(writer, $"List{aggregate.PluralName}", aggregate.PluralName, 422);
+    }
+
+    private static void InsertAggregateReadEndpoint(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate
+    )
+    {
+        writer.WriteLine(
+            $"group.MapGet(\"/{{id:int}}\", async Task<Results<Ok<Read{aggregate.SingularName}Response>, ProblemHttpResult>> ("
+        );
+        writer.Indent++;
+        writer.WriteLine($"[FromServices] {aggregate.SingularName}Repository repository,");
+        writer.WriteLine("int id,");
+        writer.WriteLine("CancellationToken cancellationToken) =>");
+        writer.Indent--;
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("var response = await repository.ReadAsync(id, cancellationToken);");
+        writer.WriteLine();
+        writer.WriteLine("if (response is null)");
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine(
+            $"return EZRestAPIProblems.NotFound($\"No {aggregate.SingularName} with id {{id}} exists.\");"
+        );
+        writer.Indent--;
+        writer.WriteLine("}");
+        writer.WriteLine();
+        writer.WriteLine("return TypedResults.Ok(response);");
+        writer.Indent--;
+        writer.WriteLine("})");
+        EmitMetadata(writer, $"Read{aggregate.SingularName}", aggregate.PluralName, 404);
+    }
+
+    private static void InsertAggregateDeleteEndpoint(
+        IndentedTextWriter writer,
+        ProviderExtensions.Aggregate aggregate
+    )
+    {
+        writer.WriteLine(
+            "group.MapDelete(\"/{id:int}\", async Task<Results<NoContent, ProblemHttpResult>> ("
+        );
+        writer.Indent++;
+        writer.WriteLine($"[FromServices] {aggregate.SingularName}Repository repository,");
+        writer.WriteLine("int id,");
+        writer.WriteLine("CancellationToken cancellationToken) =>");
+        writer.Indent--;
+        writer.WriteLine("{");
+        writer.Indent++;
+        writer.WriteLine("var deleted = await repository.DeleteAsync(id, cancellationToken);");
+        writer.WriteLine();
+        writer.WriteLine(
+            $"return deleted ? TypedResults.NoContent() : EZRestAPIProblems.NotFound($\"No {aggregate.SingularName} with id {{id}} exists.\");"
+        );
+        writer.Indent--;
+        writer.WriteLine("})");
+        EmitMetadata(writer, $"Delete{aggregate.SingularName}", aggregate.PluralName, 404);
+    }
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModelsWithRelationships();
@@ -565,6 +660,54 @@ public class EndpointsGenerator : IIncrementalGenerator
 
                 ctx.AddSource(
                     $"{model.SingularName}Endpoints.g.cs",
+                    SourceText.From(writer.InnerWriter.ToString(), Encoding.UTF8)
+                );
+            }
+        );
+
+        var aggregatesProvider = context.SyntaxProvider.GetAggregates();
+
+        context.RegisterSourceOutput(
+            aggregatesProvider,
+            (ctx, aggregate) =>
+            {
+                var writer = SourceWriter.Create();
+
+                writer.WriteLine($"namespace {aggregate.AssemblyName};");
+                writer.WriteLine();
+                writer.WriteLine("using System.Threading;");
+                writer.WriteLine("using Microsoft.AspNetCore.Builder;");
+                writer.WriteLine("using Microsoft.AspNetCore.Http;");
+                writer.WriteLine("using Microsoft.AspNetCore.Http.HttpResults;");
+                writer.WriteLine("using Microsoft.AspNetCore.Mvc;");
+                writer.WriteLine("using Microsoft.AspNetCore.Routing;");
+                writer.WriteLine();
+                writer.WriteLine($"public static class {aggregate.SingularName}Endpoints");
+                writer.WriteLine("{");
+                writer.Indent++;
+                writer.WriteLine(
+                    $"public static IEndpointRouteBuilder Map{aggregate.SingularName}Endpoints(this IEndpointRouteBuilder app)"
+                );
+                writer.WriteLine("{");
+                writer.Indent++;
+                writer.WriteLine(
+                    $"var group = app.MapGroup(\"/{aggregate.PluralName.ToLowerInvariant()}\");"
+                );
+                writer.WriteLine();
+                InsertAggregateListEndpoint(writer, aggregate);
+                writer.WriteLine();
+                InsertAggregateReadEndpoint(writer, aggregate);
+                writer.WriteLine();
+                InsertAggregateDeleteEndpoint(writer, aggregate);
+                writer.WriteLine();
+                writer.WriteLine("return app;");
+                writer.Indent--;
+                writer.WriteLine("}");
+                writer.Indent--;
+                writer.WriteLine("}");
+
+                ctx.AddSource(
+                    $"{aggregate.SingularName}Endpoints.g.cs",
                     SourceText.From(writer.InnerWriter.ToString(), Encoding.UTF8)
                 );
             }
