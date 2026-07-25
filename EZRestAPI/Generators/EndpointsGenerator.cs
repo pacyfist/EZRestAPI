@@ -1,6 +1,8 @@
 namespace EZRestAPI.Generators;
 
+using System;
 using System.CodeDom.Compiler;
+using System.Collections.Generic;
 using System.Text;
 using EZRestAPI.Providers;
 using EZRestAPI.Utils;
@@ -314,24 +316,15 @@ public class EndpointsGenerator : IIncrementalGenerator
         }
     }
 
-    private static void InsertNestedGroup(
+    private static void InsertNestedListEndpoint(
         IndentedTextWriter writer,
         ProviderExtensions.Model model,
         ProviderExtensions.RelationshipInfo rel
     )
     {
-        var parentRoute = rel.ParentPluralName.ToLowerInvariant();
-        var childRoute = rel.ChildPluralName.ToLowerInvariant();
         var name = $"{rel.ChildSingularName}Under{rel.ParentSingularName}";
         var tag = rel.ChildPluralName;
         var groupVar = $"{rel.ParentSingularName.ToLowerInvariant()}{rel.ChildSingularName}Group";
-        var createRequest = $"Create{name}Request";
-        var updateRequest = $"Update{name}Request";
-
-        writer.WriteLine(
-            $"var {groupVar} = app.MapGroup(\"/{parentRoute}/{{parentId:int}}/{childRoute}\");"
-        );
-        writer.WriteLine();
 
         // GET / -> paged list scoped to the parent.
         writer.WriteLine(
@@ -373,7 +366,19 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.Indent--;
         writer.WriteLine("})");
         EmitMetadata(writer, $"List{name}", tag, 422, 404);
-        writer.WriteLine();
+    }
+
+    private static void InsertNestedCreateEndpoint(
+        IndentedTextWriter writer,
+        ProviderExtensions.Model model,
+        ProviderExtensions.RelationshipInfo rel
+    )
+    {
+        var childRoute = rel.ChildPluralName.ToLowerInvariant();
+        var name = $"{rel.ChildSingularName}Under{rel.ParentSingularName}";
+        var tag = rel.ChildPluralName;
+        var groupVar = $"{rel.ParentSingularName.ToLowerInvariant()}{rel.ChildSingularName}Group";
+        var createRequest = $"Create{name}Request";
 
         // POST / -> create under the parent (FK from route).
         writer.WriteLine(
@@ -422,7 +427,17 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.Indent--;
         writer.WriteLine("})");
         EmitMetadata(writer, $"Create{name}", tag, 422, 404);
-        writer.WriteLine();
+    }
+
+    private static void InsertNestedReadEndpoint(
+        IndentedTextWriter writer,
+        ProviderExtensions.Model model,
+        ProviderExtensions.RelationshipInfo rel
+    )
+    {
+        var name = $"{rel.ChildSingularName}Under{rel.ParentSingularName}";
+        var tag = rel.ChildPluralName;
+        var groupVar = $"{rel.ParentSingularName.ToLowerInvariant()}{rel.ChildSingularName}Group";
 
         // GET /{id:int} -> scoped read.
         writer.WriteLine(
@@ -453,7 +468,18 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.Indent--;
         writer.WriteLine("})");
         EmitMetadata(writer, $"Read{name}", tag, 404);
-        writer.WriteLine();
+    }
+
+    private static void InsertNestedUpdateEndpoint(
+        IndentedTextWriter writer,
+        ProviderExtensions.Model model,
+        ProviderExtensions.RelationshipInfo rel
+    )
+    {
+        var name = $"{rel.ChildSingularName}Under{rel.ParentSingularName}";
+        var tag = rel.ChildPluralName;
+        var groupVar = $"{rel.ParentSingularName.ToLowerInvariant()}{rel.ChildSingularName}Group";
+        var updateRequest = $"Update{name}Request";
 
         // PUT /{id:int} -> scoped update.
         writer.WriteLine(
@@ -479,7 +505,17 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.Indent--;
         writer.WriteLine("})");
         EmitMetadata(writer, $"Update{name}", tag, 422, 404);
-        writer.WriteLine();
+    }
+
+    private static void InsertNestedDeleteEndpoint(
+        IndentedTextWriter writer,
+        ProviderExtensions.Model model,
+        ProviderExtensions.RelationshipInfo rel
+    )
+    {
+        var name = $"{rel.ChildSingularName}Under{rel.ParentSingularName}";
+        var tag = rel.ChildPluralName;
+        var groupVar = $"{rel.ParentSingularName.ToLowerInvariant()}{rel.ChildSingularName}Group";
 
         // DELETE /{id:int} -> scoped delete.
         writer.WriteLine(
@@ -513,6 +549,77 @@ public class EndpointsGenerator : IIncrementalGenerator
         writer.WriteLine("})");
         EmitMetadata(writer, $"Delete{name}", tag, 404, 409);
     }
+
+    /// <summary>
+    /// Emits the parent-scoped route group for one relationship, containing
+    /// only the verbs the model's flags select. Writes nothing at all — not
+    /// even the MapGroup line — when Nested is unset or no verb survives.
+    /// </summary>
+    private static void InsertNestedGroup(
+        IndentedTextWriter writer,
+        ProviderExtensions.Model model,
+        ProviderExtensions.RelationshipInfo rel
+    )
+    {
+        var flags = model.Endpoints;
+
+        if (!ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Nested))
+        {
+            return;
+        }
+
+        var sections = new List<Action>();
+        if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.List))
+        {
+            sections.Add(() => InsertNestedListEndpoint(writer, model, rel));
+        }
+        if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Create))
+        {
+            sections.Add(() => InsertNestedCreateEndpoint(writer, model, rel));
+        }
+        if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Read))
+        {
+            sections.Add(() => InsertNestedReadEndpoint(writer, model, rel));
+        }
+        if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Update))
+        {
+            sections.Add(() => InsertNestedUpdateEndpoint(writer, model, rel));
+        }
+        if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Delete))
+        {
+            sections.Add(() => InsertNestedDeleteEndpoint(writer, model, rel));
+        }
+
+        if (sections.Count == 0)
+        {
+            return;
+        }
+
+        var groupVar = $"{rel.ParentSingularName.ToLowerInvariant()}{rel.ChildSingularName}Group";
+        writer.WriteLine(
+            $"var {groupVar} = app.MapGroup(\"/{rel.ParentPluralName.ToLowerInvariant()}/{{parentId:int}}/{rel.ChildPluralName.ToLowerInvariant()}\");"
+        );
+
+        foreach (var section in sections)
+        {
+            writer.WriteLine();
+            section();
+        }
+    }
+
+    /// <summary>
+    /// True when the flags would make <see cref="InsertNestedGroup"/> emit
+    /// something. The caller needs this before writing its separator.
+    /// </summary>
+    private static bool EmitsNestedGroup(ProviderExtensions.EndpointFeatures flags) =>
+        ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Nested)
+        && (
+            ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.List)
+            || ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Create)
+            || ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Read)
+            || ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Update)
+            || ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Delete)
+        );
 
     // ---- Aggregate endpoints (read/list/delete; T2 scope) ----------------
 
@@ -738,6 +845,16 @@ public class EndpointsGenerator : IIncrementalGenerator
             modelsProvider,
             (ctx, model) =>
             {
+                var flags = model.Endpoints;
+
+                // Endpoints.None is persistence only: no endpoint class at all.
+                // BootstrapGenerator applies the matching filter so nothing
+                // references the class that is not emitted here.
+                if (flags == ProviderExtensions.EndpointFeatures.None)
+                {
+                    return;
+                }
+
                 var writer = SourceWriter.Create();
 
                 writer.WriteLine($"namespace {model.AssemblyName};");
@@ -757,22 +874,50 @@ public class EndpointsGenerator : IIncrementalGenerator
                 );
                 writer.WriteLine("{");
                 writer.Indent++;
-                writer.WriteLine($"var group = app.MapGroup(\"/{Route(model)}\");");
-                writer.WriteLine();
-                InsertListEndpoint(writer, model);
-                writer.WriteLine();
-                InsertCreateEndpoint(writer, model);
-                writer.WriteLine();
-                InsertReadEndpoint(writer, model);
-                writer.WriteLine();
-                InsertUpdateEndpoint(writer, model);
-                writer.WriteLine();
-                InsertDeleteEndpoint(writer, model);
-                foreach (var rel in model.ParentRelationships)
+
+                var flat = new List<Action>();
+                if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.List))
+                {
+                    flat.Add(() => InsertListEndpoint(writer, model));
+                }
+                if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Create))
+                {
+                    flat.Add(() => InsertCreateEndpoint(writer, model));
+                }
+                if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Read))
+                {
+                    flat.Add(() => InsertReadEndpoint(writer, model));
+                }
+                if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Update))
+                {
+                    flat.Add(() => InsertUpdateEndpoint(writer, model));
+                }
+                if (ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Delete))
+                {
+                    flat.Add(() => InsertDeleteEndpoint(writer, model));
+                }
+
+                // No flat verb survived: don't emit a "group" nobody reads.
+                if (flat.Count > 0)
+                {
+                    writer.WriteLine($"var group = app.MapGroup(\"/{Route(model)}\");");
+                }
+
+                foreach (var section in flat)
                 {
                     writer.WriteLine();
-                    InsertNestedGroup(writer, model, rel);
+                    section();
                 }
+
+                if (EmitsNestedGroup(flags))
+                {
+                    foreach (var rel in model.ParentRelationships)
+                    {
+                        writer.WriteLine();
+                        InsertNestedGroup(writer, model, rel);
+                    }
+                }
+
                 writer.WriteLine();
                 writer.WriteLine("return app;");
                 writer.Indent--;

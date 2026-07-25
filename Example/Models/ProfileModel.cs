@@ -17,7 +17,7 @@ public class AddressModel
     public required string PostalCode { get; set; }
 }
 
-[EZRestAPI.Model("Profile", "Profiles")]
+[EZRestAPI.Model("Profile", "Profiles", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class ProfileModel
 {
     [MaxLength(128)]

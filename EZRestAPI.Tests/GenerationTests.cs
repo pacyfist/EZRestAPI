@@ -11,7 +11,7 @@ public class GenerationTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Tag", "Tags")]
+            [EZRestAPI.Model("Tag", "Tags", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class TagModel
             {
                 public required string Name { get; set; }
@@ -39,7 +39,7 @@ public class GenerationTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Marker", "Markers")]
+            [EZRestAPI.Model("Marker", "Markers", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class MarkerModel
             {
             }
@@ -62,7 +62,7 @@ public class GenerationTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Meeting", "Meetings")]
+            [EZRestAPI.Model("Meeting", "Meetings", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class MeetingModel
             {
                 public required string Event { get; set; }
@@ -92,7 +92,7 @@ public class GenerationTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Tag", "Tags")]
+            [EZRestAPI.Model("Tag", "Tags", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class TagModel
             {
                 public int Id { get; set; }
@@ -124,7 +124,7 @@ public class GenerationTests
 
             using System.Collections.Generic;
 
-            [EZRestAPI.Model("Post", "Posts")]
+            [EZRestAPI.Model("Post", "Posts", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class PostModel
             {
                 public required string Title { get; set; }
@@ -195,7 +195,7 @@ public class GenerationTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Person", "People")]
+            [EZRestAPI.Model("Person", "People", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class PersonModel
             {
                 public required string First { get; set; }
@@ -234,7 +234,7 @@ public class GenerationTests
 
             using System.Collections.Generic;
 
-            [EZRestAPI.Model("Post", "Posts")]
+            [EZRestAPI.Model("Post", "Posts", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class PostModel
             {
                 public required string Title { get; set; }
@@ -268,7 +268,7 @@ public class GenerationTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Tag", "Tags")]
+            [EZRestAPI.Model("Tag", "Tags", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class TagModel
             {
                 public required string Name { get; set; }

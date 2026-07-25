@@ -4,7 +4,7 @@ namespace Example.Models;
 // there is no `External` model, so without an opt-out it would raise EZR011.
 // [EZRestAPI.Scalar] keeps it a plain scalar column and suppresses the warning,
 // generating NO nested route.
-[EZRestAPI.Model("SensorReading", "SensorReadings")]
+[EZRestAPI.Model("SensorReading", "SensorReadings", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class SensorReadingModel
 {
     [EZRestAPI.Scalar]

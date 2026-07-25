@@ -40,6 +40,36 @@ public static class ProviderExtensions
         Collection,
     }
 
+    /// <summary>
+    /// Generator-side mirror of the emitted <c>EZRestAPI.Endpoints</c> enum.
+    /// The generator runs inside the compilation that defines that type, so it
+    /// cannot reference it; these values must stay bit-for-bit identical, which
+    /// <c>EndpointFlagsTests.EndpointFeatures_MirrorsGeneratedEnum</c> pins by
+    /// comparing the full member set in both directions — a member added,
+    /// renamed, or reassigned on either side without the other fails that test.
+    /// </summary>
+    [System.Flags]
+    public enum EndpointFeatures
+    {
+        None = 0,
+        List = 1,
+        Create = 2,
+        Read = 4,
+        Update = 8,
+        Delete = 16,
+        Nested = 32,
+
+        Crud = List | Create | Read | Update | Delete,
+        ReadOnly = List | Read | Nested,
+        All = Crud | Nested,
+    }
+
+    /// <summary>
+    /// Non-boxing flag test. <c>Enum.HasFlag</c> boxes both operands and this
+    /// runs once per route per model per generator pass.
+    /// </summary>
+    public static bool Has(EndpointFeatures flags, EndpointFeatures flag) => (flags & flag) == flag;
+
     public record Model(
         string AssemblyName,
         string ModelNamespace,
@@ -50,7 +80,8 @@ public static class ProviderExtensions
         EquatableArray<Property> Properties,
         string? UserIdTypeName = null,
         EquatableArray<RelationshipInfo> ParentRelationships = default,
-        EquatableArray<RelationshipInfo> ChildRelationships = default
+        EquatableArray<RelationshipInfo> ChildRelationships = default,
+        EndpointFeatures Endpoints = EndpointFeatures.None
     );
 
     public record RelationshipInfo(
@@ -395,6 +426,7 @@ public static class ProviderExtensions
         var attribute = context.Attributes.First();
         var singularName = GetArgument(attribute, 0, "SingularNameNotSet");
         var pluralName = GetArgument(attribute, 1, "PluralNameNotSet");
+        var endpoints = GetEndpoints(attribute);
 
         var className = symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
 
@@ -418,7 +450,8 @@ public static class ProviderExtensions
                 ImmutableHashSet.Create(className),
                 excludeId: true
             ),
-            UserIdTypeName: userIdProperty?.Type.ToDisplayString()
+            UserIdTypeName: userIdProperty?.Type.ToDisplayString(),
+            Endpoints: endpoints
         );
     }
 
@@ -782,6 +815,26 @@ public static class ProviderExtensions
         return attribute.ConstructorArguments.Length > index
             ? attribute.ConstructorArguments[index].Value?.ToString() ?? fallback
             : fallback;
+    }
+
+    /// <summary>
+    /// Reads the <c>Endpoints</c> named argument off [Model]. Absent, or any
+    /// value that is not an int, resolves to <see cref="EndpointFeatures.None"/>
+    /// — exposure is opt-in, so an unreadable flag must fail closed.
+    /// </summary>
+    private static EndpointFeatures GetEndpoints(AttributeData attribute)
+    {
+        foreach (var named in attribute.NamedArguments)
+        {
+            if (named.Key != "Endpoints")
+            {
+                continue;
+            }
+
+            return named.Value.Value is int value ? (EndpointFeatures)value : EndpointFeatures.None;
+        }
+
+        return EndpointFeatures.None;
     }
 
     private static EquatableArray<Property> CollectProperties(

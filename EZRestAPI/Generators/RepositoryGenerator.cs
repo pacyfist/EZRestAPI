@@ -711,6 +711,11 @@ public class RepositoryGenerator : IIncrementalGenerator
             modelsProvider,
             (ctx, model) =>
             {
+                if (model.Endpoints == ProviderExtensions.EndpointFeatures.None)
+                {
+                    return;
+                }
+
                 var writer = SourceWriter.Create();
 
                 writer.WriteLine($"namespace {model.AssemblyName};");

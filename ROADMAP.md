@@ -67,11 +67,13 @@ accurate enough to generate a client from.
 An all-or-nothing generator gets abandoned at the first special case. Add
 opt-outs and hooks before adding more conventions.
 
-- [ ] **Attribute options:**
-      `[Model("Post", "Posts", Route = "blog-posts", ReadOnly = true,
-      GenerateEndpoints = false, KeyType = KeyType.Guid)]`.
-      `ReadOnly` generates only GET endpoints; `GenerateEndpoints = false`
-      keeps repository/DTOs but skips HTTP.
+- [x] **Endpoint flags.** `[Model("Post", "Posts", Endpoints = Endpoints.ReadOnly)]`
+      selects which endpoints are generated, defaulting to `Endpoints.None`
+      (DbContext registration only). Presets: `Crud`, `ReadOnly`, `All`.
+      `EZR013` warns when `Create` is set without `Read`; `EZR014` reports a
+      model with no API surface.
+- [ ] **Remaining attribute options:** `Route = "blog-posts"`,
+      `KeyType = KeyType.Guid`.
 - [ ] **Authorization.** `[Model(..., Policy = "PostEditor")]` →
       `.RequireAuthorization("PostEditor")` on the group, with an
       `AllowAnonymousRead` switch for public-read/private-write. Default stays

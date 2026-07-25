@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations;
 
 // Third level of a chain: Author -> Book -> Chapter. Chapter's parent (Book) is
 // itself a child of Author.
-[EZRestAPI.Model("Chapter", "Chapters")]
+[EZRestAPI.Model("Chapter", "Chapters", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class ChapterModel
 {
     [MaxLength(255)]

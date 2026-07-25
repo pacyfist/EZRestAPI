@@ -151,6 +151,11 @@ public class DtoGenerator : IIncrementalGenerator
             relModelsProvider,
             (ctx, model) =>
             {
+                if (model.Endpoints == ProviderExtensions.EndpointFeatures.None)
+                {
+                    return;
+                }
+
                 foreach (var rel in model.ParentRelationships)
                 {
                     EmitNestedDto(
@@ -429,6 +434,11 @@ public class DtoGenerator : IIncrementalGenerator
             modelsProvider,
             (ctx, model) =>
             {
+                if (model.Endpoints == ProviderExtensions.EndpointFeatures.None)
+                {
+                    return;
+                }
+
                 var className = string.Format(classNameFormat, model.SingularName);
 
                 var writer = SourceWriter.Create();

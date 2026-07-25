@@ -116,6 +116,50 @@ public class DiagnosticsGenerator : IIncrementalGenerator
         isEnabledByDefault: true
     );
 
+    public static readonly DiagnosticDescriptor CreateWithoutRead = new(
+        "EZR013",
+        "Create endpoint has an unreachable Location header",
+        "Model '{0}' generates a Create endpoint whose Location header points at '/{1}/{{id}}', but Endpoints.Read is not set",
+        Category,
+        DiagnosticSeverity.Warning,
+        isEnabledByDefault: true
+    );
+
+    public static readonly DiagnosticDescriptor NoEndpointsGenerated = new(
+        "EZR014",
+        "Model generates no API surface",
+        "Model '{0}' is registered in the DbContext only; set Endpoints on [EZRestAPI.Model] to generate a repository, DTOs and endpoints",
+        Category,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true
+    );
+
+    // Endpoints != None still emits the repository, DTOs and bootstrap
+    // registration (DtoGenerator/RepositoryGenerator/BootstrapGenerator all key
+    // off flags != None, not off "a verb is selected"), so EZR014's "registered
+    // in the DbContext only" wording would be inaccurate here; EZR015 covers the
+    // narrower "no route can ever be emitted" case instead.
+    public static readonly DiagnosticDescriptor NoEndpointVerbsSelected = new(
+        "EZR015",
+        "Model selects no endpoint verbs",
+        "Model '{0}' selects no endpoint verbs, so no routes are generated; add at least one of List, Create, Read, Update or Delete",
+        Category,
+        DiagnosticSeverity.Info,
+        isEnabledByDefault: true
+    );
+
+    // List|Create|Read|Update|Delete: the flat verbs. Nested alone (or any
+    // undefined bit, e.g. an out-of-range cast) selects none of these, and
+    // EndpointsGenerator.EmitsNestedGroup requires both Nested AND at least one
+    // of these verbs, so with none set no route — flat or nested — is ever
+    // emitted even though the endpoint class, repository and DTOs still are.
+    private const ProviderExtensions.EndpointFeatures VerbMask =
+        ProviderExtensions.EndpointFeatures.List
+        | ProviderExtensions.EndpointFeatures.Create
+        | ProviderExtensions.EndpointFeatures.Read
+        | ProviderExtensions.EndpointFeatures.Update
+        | ProviderExtensions.EndpointFeatures.Delete;
+
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModelsWithDiagnostics().Collect();
@@ -155,6 +199,35 @@ public class DiagnosticsGenerator : IIncrementalGenerator
                     ReportInvalidName(ctx, model.SingularName, model.ModelName, location);
                     ReportInvalidName(ctx, model.PluralName, model.ModelName, location);
                     ReportPropertyDiagnostics(ctx, model.ModelName, location, model.Properties);
+
+                    var flags = model.Endpoints;
+
+                    if (flags == ProviderExtensions.EndpointFeatures.None)
+                    {
+                        ctx.ReportDiagnostic(
+                            Diagnostic.Create(NoEndpointsGenerated, location, model.ModelName)
+                        );
+                    }
+                    else if ((flags & VerbMask) == ProviderExtensions.EndpointFeatures.None)
+                    {
+                        ctx.ReportDiagnostic(
+                            Diagnostic.Create(NoEndpointVerbsSelected, location, model.ModelName)
+                        );
+                    }
+                    else if (
+                        ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Create)
+                        && !ProviderExtensions.Has(flags, ProviderExtensions.EndpointFeatures.Read)
+                    )
+                    {
+                        ctx.ReportDiagnostic(
+                            Diagnostic.Create(
+                                CreateWithoutRead,
+                                location,
+                                model.ModelName,
+                                model.PluralName.ToLowerInvariant()
+                            )
+                        );
+                    }
                 }
 
                 var knownSingulars = new HashSet<string>(models.Select(m => m.Model.SingularName));

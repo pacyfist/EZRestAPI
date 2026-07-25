@@ -1,6 +1,6 @@
 ﻿namespace Example.Models;
 
-[EZRestAPI.Model("SimpleData", "SimpleDataPlural")]
+[EZRestAPI.Model("SimpleData", "SimpleDataPlural", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class SimpleDataModel
 {
     public required int IntegerProperty { get; set; }

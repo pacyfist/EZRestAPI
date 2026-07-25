@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations;
 // Rich validation annotations beyond [MaxLength]: each is copied onto the
 // generated CreateRegistrationRequest and enforced by the validation filter,
 // so a bad field yields a 422 problem+json with an RFC 9457 `errors` map.
-[EZRestAPI.Model("Registration", "Registrations")]
+[EZRestAPI.Model("Registration", "Registrations", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class RegistrationModel
 {
     [Required]

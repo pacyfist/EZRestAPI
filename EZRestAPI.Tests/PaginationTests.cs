@@ -5,7 +5,7 @@ public class PaginationTests
     private const string Source = """
         namespace Tests;
 
-        [EZRestAPI.Model("Widget", "Widgets")]
+        [EZRestAPI.Model("Widget", "Widgets", Endpoints = EZRestAPI.Endpoints.All)]
         public partial class WidgetModel
         {
             public required string Name { get; set; }

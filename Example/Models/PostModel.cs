@@ -2,7 +2,7 @@ namespace Example.Models;
 
 using System.ComponentModel.DataAnnotations;
 
-[EZRestAPI.Model("Post", "Posts")]
+[EZRestAPI.Model("Post", "Posts", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class PostModel
 {
     [MaxLength(255)]

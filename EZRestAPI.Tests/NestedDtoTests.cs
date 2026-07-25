@@ -5,10 +5,10 @@ public class NestedDtoTests
     private const string Source = """
         namespace Tests;
 
-        [EZRestAPI.Model("Author", "Authors")]
+        [EZRestAPI.Model("Author", "Authors", Endpoints = EZRestAPI.Endpoints.All)]
         public partial class AuthorModel { public required string Name { get; set; } }
 
-        [EZRestAPI.Model("Book", "Books")]
+        [EZRestAPI.Model("Book", "Books", Endpoints = EZRestAPI.Endpoints.All)]
         public partial class BookModel
         {
             public required string Title { get; set; }

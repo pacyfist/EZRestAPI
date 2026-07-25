@@ -3,7 +3,7 @@ namespace Example.Models;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
-[EZRestAPI.Model("Author", "Authors")]
+[EZRestAPI.Model("Author", "Authors", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class AuthorModel
 {
     // String Types

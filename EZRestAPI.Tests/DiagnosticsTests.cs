@@ -9,7 +9,7 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Thing", "Things")]
+            [EZRestAPI.Model("Thing", "Things", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class ThingModel
             {
                 public required string Name { get; set; }
@@ -27,7 +27,7 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Thing", "Things")]
+            [EZRestAPI.Model("Thing", "Things", Endpoints = EZRestAPI.Endpoints.All)]
             public class ThingModel
             {
                 public required string Name { get; set; }
@@ -45,13 +45,13 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Thing", "Things")]
+            [EZRestAPI.Model("Thing", "Things", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class ThingModel
             {
                 public required string Name { get; set; }
             }
 
-            [EZRestAPI.Model("Thing", "OtherThings")]
+            [EZRestAPI.Model("Thing", "OtherThings", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class OtherThingModel
             {
                 public required string Name { get; set; }
@@ -69,13 +69,13 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Thing", "Things")]
+            [EZRestAPI.Model("Thing", "Things", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class ThingModel
             {
                 public required string Name { get; set; }
             }
 
-            [EZRestAPI.Model("OtherThing", "Things")]
+            [EZRestAPI.Model("OtherThing", "Things", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class OtherThingModel
             {
                 public required string Name { get; set; }
@@ -95,13 +95,13 @@ public class DiagnosticsTests
 
             using System.Collections.Generic;
 
-            [EZRestAPI.Model("Author", "Authors")]
+            [EZRestAPI.Model("Author", "Authors", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class AuthorModel
             {
                 public required string Name { get; set; }
             }
 
-            [EZRestAPI.Model("Book", "Books")]
+            [EZRestAPI.Model("Book", "Books", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class BookModel
             {
                 public required string Title { get; set; }
@@ -125,7 +125,7 @@ public class DiagnosticsTests
 
             using System.Collections.Generic;
 
-            [EZRestAPI.Model("Node", "Nodes")]
+            [EZRestAPI.Model("Node", "Nodes", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class NodeModel
             {
                 public required List<BranchModel> Branches { get; set; }
@@ -151,7 +151,7 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Thing", "Things")]
+            [EZRestAPI.Model("Thing", "Things", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class ThingModel
             {
                 public System.Guid Id { get; set; }
@@ -171,7 +171,7 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("blog post", "blog posts")]
+            [EZRestAPI.Model("blog post", "blog posts", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class BlogPostModel
             {
                 public required string Title { get; set; }
@@ -191,7 +191,7 @@ public class DiagnosticsTests
 
             using System.Collections.Generic;
 
-            [EZRestAPI.Model("Post", "Posts")]
+            [EZRestAPI.Model("Post", "Posts", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class PostModel
             {
                 public required HashSet<CommentModel> Comments { get; set; }
@@ -217,7 +217,7 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Author", "Authors")]
+            [EZRestAPI.Model("Author", "Authors", Endpoints = EZRestAPI.Endpoints.All)]
             [EZRestAPI.Nested("Author")]
             public partial class AuthorModel
             {
@@ -238,13 +238,13 @@ public class DiagnosticsTests
 
             using System.Collections.Generic;
 
-            [EZRestAPI.Model("Author", "Authors")]
+            [EZRestAPI.Model("Author", "Authors", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class AuthorModel
             {
                 public required string Name { get; set; }
             }
 
-            [EZRestAPI.Model("Book", "Books")]
+            [EZRestAPI.Model("Book", "Books", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class BookModel
             {
                 public required AuthorModel[] Authors { get; set; }
@@ -264,13 +264,13 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Post", "Posts")]
+            [EZRestAPI.Model("Post", "Posts", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class PostModel
             {
                 public required string Title { get; set; }
             }
 
-            [EZRestAPI.Model("Poster", "POSTS")]
+            [EZRestAPI.Model("Poster", "POSTS", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class PosterModel
             {
                 public required string Name { get; set; }
@@ -312,7 +312,7 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Book", "Books")]
+            [EZRestAPI.Model("Book", "Books", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class BookModel
             {
                 public required string Title { get; set; }
@@ -331,7 +331,7 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Author", "Authors")]
+            [EZRestAPI.Model("Author", "Authors", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class AuthorModel
             {
                 public required string Name { get; set; }
@@ -350,10 +350,10 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Author", "Authors")]
+            [EZRestAPI.Model("Author", "Authors", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class AuthorModel { public required string Name { get; set; } }
 
-            [EZRestAPI.Model("Book", "Books")]
+            [EZRestAPI.Model("Book", "Books", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class BookModel
             {
                 public required string Title { get; set; }
@@ -372,7 +372,7 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Book", "Books")]
+            [EZRestAPI.Model("Book", "Books", Endpoints = EZRestAPI.Endpoints.All)]
             public partial class BookModel
             {
                 public required string Title { get; set; }
@@ -453,7 +453,7 @@ public class DiagnosticsTests
             """
             namespace Tests;
 
-            [EZRestAPI.Model("Order", "Orders")]
+            [EZRestAPI.Model("Order", "Orders", Endpoints = EZRestAPI.Endpoints.All)]
             [EZRestAPI.Aggregate("Order", "Orders")]
             public partial class Order
             {

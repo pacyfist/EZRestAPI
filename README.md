@@ -16,6 +16,7 @@ code for a working REST API. You only add attributes to your own classes.
 - [Add it to your project](#add-it-to-your-project)
 - [Quick start](#quick-start)
 - [Your models](#your-models)
+- [Endpoints](#endpoints)
 - [Links between models](#links-between-models)
 - [Owned data](#owned-data)
 - [Rich domain models (aggregates)](#rich-domain-models-aggregates)
@@ -60,14 +61,16 @@ is plural. Make the class `partial` so the generator can add to it (it adds an `
 key for you):
 
 ```csharp
-[EZRestAPI.Model("Book", "Books")]
+[EZRestAPI.Model("Book", "Books", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class BookModel
 {
     public required string Title { get; set; }
 }
 ```
 
-That gives you these routes. The path is the plural name, lowercased (`/books`):
+`Endpoints` says which routes to expose; here `All` turns on every one. See
+[Endpoints](#endpoints) for the other options. That gives you these routes.
+The path is the plural name, lowercased (`/books`):
 
 - `POST /books` — create one. Returns `201 Created`.
 - `GET /books/{id}` — read one. Returns `200 OK`, or `404` if not found.
@@ -78,14 +81,14 @@ That gives you these routes. The path is the plural name, lowercased (`/books`):
 ## Your models
 
 A model is a plain C# class. Mark it `partial` and add `[EZRestAPI.Model]` with a
-singular and a plural name. At compile time, EZRestAPI reads the class and writes,
-for each `[Model]`:
+singular and a plural name. At compile time, EZRestAPI reads the class and always writes:
 
 - An `Id` field (`int`, the primary key). You don't write it. If you want your own `Id`, add one — it must be an `int`.
 - A `DbSet` on your database context, named after the plural name (so `Books`). This is the table.
-- A repository class (`BookRepository`) that does the database work.
-- Request and response types (DTOs): `CreateBookRequest`, `CreateBookResponse`, `ReadBookResponse`, `UpdateBookRequest`.
-- The REST endpoints shown in [Quick start](#quick-start).
+
+Everything else — the repository, the DTOs, and the REST endpoints — depends on the
+`Endpoints` flags you set on `[Model]`. See [Endpoints](#endpoints) for what those
+generate and how to choose them.
 
 ### Field types
 
@@ -114,7 +117,7 @@ Put standard .NET validation attributes on your fields. EZRestAPI copies them on
 - `[RegularExpression(pattern)]` — must match a pattern.
 
 ```csharp
-[EZRestAPI.Model("Registration", "Registrations")]
+[EZRestAPI.Model("Registration", "Registrations", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class RegistrationModel
 {
     [Required]
@@ -150,6 +153,82 @@ One extra check happens for free: a non-nullable `string` (like `string Title` w
 
 See `Example/Models/RegistrationModel.cs` for a full validation example.
 
+## Endpoints
+
+`[Model]` takes an `Endpoints` flag saying which routes to expose:
+
+```csharp
+[Flags]
+public enum Endpoints
+{
+    None   = 0,
+    List   = 1, Create = 2, Read = 4, Update = 8, Delete = 16,
+    Nested = 32,
+
+    Crud     = List | Create | Read | Update | Delete,   // flat routes only
+    ReadOnly = List | Read | Nested,
+    All      = Crud | Nested,
+}
+```
+
+| Flag | Route it turns on |
+| --- | --- |
+| `List` | `GET /{plural}` |
+| `Create` | `POST /{plural}` |
+| `Read` | `GET /{plural}/{id}` |
+| `Update` | `PUT /{plural}/{id}` |
+| `Delete` | `DELETE /{plural}/{id}` |
+| `Nested` | the nested form of whichever verbs above are also set (see [Links between models](#links-between-models)) |
+
+Combine flags with `|`, e.g. `Endpoints = EZRestAPI.Endpoints.List | EZRestAPI.Endpoints.Read`.
+Three presets cover the common cases: `Crud` (every flat route, no nested routes),
+`ReadOnly` (read-only, flat and nested), and `All` (everything).
+
+### The default is `None`
+
+Leave `Endpoints` off `[Model]` and you get `None`. The model is still registered
+on the `DbContext` and gets its `Id` — that much always happens — but nothing
+else: no repository, no DTOs, no routes, and it is left out of `AddEZRestAPI` and
+`MapEZRestAPI`. That is a supported way to persist a type with no API of its own;
+see `AuditLogModel` in [the Example project](#the-example-project--tests).
+
+### Any other value builds everything, and exposes only what you chose
+
+Set even one flag — say just `Endpoints.List` — and EZRestAPI still generates the
+*complete* repository and DTO surface: `CreateAsync`, `ReadAsync`, `UpdateAsync`,
+`DeleteAsync`, `ListAsync`, and every request/response type (`CreateBookRequest`,
+`UpdateBookRequest`, and so on). Only the routes for the flags you actually set
+get mapped. The usual reason to leave out `Create` is that you want to hand-write
+`POST /books` yourself — with `CreateAsync` and `CreateBookRequest` already there,
+your replacement endpoint has something to build on instead of writing that
+plumbing from scratch.
+
+### `Nested` is ANDed with the verbs, not added to them
+
+`Nested` has no route of its own. It switches on the nested *form* of whichever
+verbs are also set. `Endpoints.List | Endpoints.Nested` gives you both
+`GET /books` and `GET /authors/{authorId}/books`. `Endpoints.Crud` deliberately
+leaves `Nested` out, so it gives flat routes only, even for a model with a
+foreign key that would otherwise make it nestable.
+
+### Three diagnostics watch this
+
+- `EZR013` (Warning) — `Create` is set without `Read`. The `Create` response's
+  `Location` header points at the `Read` route, which doesn't exist without it,
+  so the header would point nowhere.
+- `EZR014` (Info) — the model is `Endpoints.None` and generates no API surface
+  at all: no repository, no DTOs, no endpoint class, just the `DbSet`.
+- `EZR015` (Info) — the model's `Endpoints` is non-zero (so the repository,
+  DTOs and endpoint class ARE generated) but selects no verb, so no route is
+  generated either. `Endpoints.Nested` alone is the common way to hit this: it
+  only switches the nested *form* of whichever verbs are also set, so on its
+  own it selects nothing.
+
+`EZR014` and `EZR015` are both informational, not mistakes, but easy to miss:
+MSBuild's console logger hides Info diagnostics at the default verbosity, so
+if a model you expected to have an API doesn't, rebuild with `-v detailed` to
+see them (an IDE shows them as normal).
+
 ## Links between models
 
 To link two models, add a property named `{Singular}Id`. If its name (minus `Id`)
@@ -159,7 +238,7 @@ a foreign key. Use `int?` if the link is optional.
 `Book` points to `Author`:
 
 ```csharp
-[EZRestAPI.Model("Book", "Books")]
+[EZRestAPI.Model("Book", "Books", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class BookModel
 {
     [MaxLength(255)]
@@ -215,7 +294,7 @@ You save the whole tree in one call, and deleting the parent deletes them too.
 A post has comments, and each comment has reactions:
 
 ```csharp
-[EZRestAPI.Model("Post", "Posts")]
+[EZRestAPI.Model("Post", "Posts", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class PostModel
 {
     [MaxLength(255)]
@@ -252,7 +331,7 @@ with `EZR011`. Add `[EZRestAPI.Scalar]` to say "this is just a plain number, lea
 it alone." The warning goes away and no nested route is made.
 
 ```csharp
-[EZRestAPI.Model("SensorReading", "SensorReadings")]
+[EZRestAPI.Model("SensorReading", "SensorReadings", Endpoints = EZRestAPI.Endpoints.All)]
 public partial class SensorReadingModel
 {
     [EZRestAPI.Scalar]
@@ -421,7 +500,7 @@ In Development you can open `/openapi/v1.json` to get the full document. Each ro
 
 ## Build warnings
 
-The generator checks your models at compile time. Most problems stop the build (Error); one is a Warning. Fix the code and rebuild.
+The generator checks your models at compile time. Most problems stop the build (Error); some are just a heads-up (Warning, Info). Fix the code and rebuild.
 
 | Code | Level | Meaning |
 | --- | --- | --- |
@@ -437,6 +516,9 @@ The generator checks your models at compile time. Most problems stop the build (
 | EZR010 | Error | A class has `[Model]` plus `[Nested]` (or `[Model]` plus `[Aggregate]`); pick one. |
 | EZR011 | Warning | A property looks like a foreign key (`XId`) but no `[Model]` has singular name `X`; add that model, or mark it `[Scalar]`. |
 | EZR012 | Error | An `[Aggregate]` does not have exactly one `[Factory]` entry point. |
+| EZR013 | Warning | `Endpoints.Create` is set without `Endpoints.Read`, so the `Create` response's `Location` header points at a `GET` route that does not exist. |
+| EZR014 | Info | The model has `Endpoints.None` (the default) and generates no repository, DTOs, or routes — just the `DbSet`. If this is a surprise, add an `Endpoints` value to `[Model]`. Console builds hide Info diagnostics at the default verbosity; run with `-v detailed` to see it (an IDE shows it as usual). |
+| EZR015 | Info | The model's `Endpoints` selects no verb (`List`/`Create`/`Read`/`Update`/`Delete`) — for example `Endpoints.Nested` alone. The repository, DTOs and endpoint class are still generated, but no route is, since `Nested` only switches the *form* of a verb that must also be set. Add at least one verb. |
 
 ## The Example project & tests
 
@@ -448,6 +530,9 @@ The generator checks your models at compile time. Most problems stop the build (
 - `RegistrationModel` — validation.
 - `SensorReadingModel` — `[Scalar]` to opt an id-shaped field out.
 - `ReviewModel` — more than one foreign key.
+- `AuditLogModel` — `Endpoints.None`: persistence with no API at all.
+- `ExchangeRateModel` — `Endpoints.ReadOnly`: only the `GET` routes.
+- `AuditNoteModel` — `Endpoints.Crud`: a child of `AuditLogModel` whose nested routes are deliberately left off, so it only appears at its flat, top-level path.
 - `OrderAggregate`, `ShoppingCartAggregate` (constructor factory), `InvoiceAggregate` (`OwnsMany` child) — DDD aggregates.
 
 `Example/Program.cs` is the full wiring (`AddEZRestAPI`, `MapEZRestAPI`, OpenAPI).

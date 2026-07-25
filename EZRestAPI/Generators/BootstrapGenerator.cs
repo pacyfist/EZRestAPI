@@ -30,8 +30,11 @@ public class BootstrapGenerator : IIncrementalGenerator
                     ? aggregates.First().AssemblyName
                     : models.First().AssemblyName;
 
-                // Both kinds expose a `{Singular}Repository` + `Map{Singular}Endpoints`.
+                // Both kinds expose a `{Singular}Repository` + `Map{Singular}Endpoints`
+                // — except Endpoints.None models, which are persistence only and
+                // generate neither, so naming them here would dangle.
                 var repositoryNames = models
+                    .Where(m => m.Endpoints != ProviderExtensions.EndpointFeatures.None)
                     .Select(m => m.SingularName)
                     .Concat(aggregates.Select(a => a.SingularName))
                     .ToArray();
