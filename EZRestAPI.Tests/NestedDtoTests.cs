@@ -36,4 +36,42 @@ public class NestedDtoTests
         Assert.DoesNotContain("AuthorId", dto);
         Assert.DoesNotContain("public int Id", dto);
     }
+
+    /// <summary>
+    /// A read-only collection interface is a supported nested shape on a plain
+    /// [Model], mapped as OwnsMany with the element exposed as its {Nested}Dto.
+    /// It needs a setter like any other model property.
+    /// </summary>
+    [Fact]
+    public void ReadOnlyListOfNested_OnAModel_MapsAsOwnsManyOfTheDto()
+    {
+        var result = GeneratorHarness.Run(
+            """
+            namespace Tests;
+
+            using System.Collections.Generic;
+
+            [EZRestAPI.Nested("Line")]
+            public class LineModel
+            {
+                public required string Sku { get; set; }
+            }
+
+            [EZRestAPI.Model("Basket", "Baskets", Endpoints = EZRestAPI.Endpoints.All)]
+            public partial class BasketModel
+            {
+                public required IReadOnlyList<LineModel> Lines { get; set; }
+            }
+            """
+        );
+
+        Assert.Contains(
+            "entity.OwnsMany(e => e.Lines);",
+            GeneratorHarness.GetSource(result, "CustomDbContext.g.cs")
+        );
+
+        var read = GeneratorHarness.GetSource(result, "ReadBasketResponse.g.cs");
+        Assert.Contains("LineDto", read);
+        Assert.DoesNotContain("LineModel", read);
+    }
 }

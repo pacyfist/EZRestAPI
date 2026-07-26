@@ -155,6 +155,28 @@ public class OpenApiDocumentTests : IDisposable
             Assert.DoesNotContain("/addresses", path.Name);
     }
 
+    [Fact]
+    public async Task OpenApiDocument_DescribesAReadOnlyNestedCollection()
+    {
+        var root = await LoadRootAsync();
+        var schemas = root.GetProperty("components").GetProperty("schemas");
+
+        Assert.True(schemas.TryGetProperty("ReadPostResponse", out var readPost));
+        var commentsProp = readPost.GetProperty("properties").GetProperty("comments");
+        Assert.Equal("array", commentsProp.GetProperty("type").GetString());
+
+        // Comment.Reactions is an IReadOnlyList<ReactionModel>. Its element must
+        // be the generated ReactionDto, never the owning type ReactionModel.
+        Assert.True(schemas.TryGetProperty("CommentDto", out var commentDto));
+        var reactionsProp = commentDto.GetProperty("properties").GetProperty("reactions");
+        Assert.Equal("array", reactionsProp.GetProperty("type").GetString());
+        Assert.Contains("ReactionDto", reactionsProp.GetProperty("items").GetRawText());
+        Assert.False(
+            schemas.TryGetProperty("ReactionModel", out _),
+            "The owning type ReactionModel leaked into the OpenAPI schema set."
+        );
+    }
+
     private static JsonElement Operation(JsonElement paths, string path, string verb)
     {
         Assert.True(paths.TryGetProperty(path, out var item), $"Missing path {path}.");

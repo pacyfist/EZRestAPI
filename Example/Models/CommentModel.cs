@@ -8,5 +8,5 @@ public class CommentModel
     [MaxLength(1024)]
     public required string Text { get; set; }
 
-    public required List<ReactionModel> Reactions { get; set; }
+    public required IReadOnlyList<ReactionModel> Reactions { get; set; }
 }
