@@ -107,15 +107,6 @@ public class DiagnosticsGenerator : IIncrementalGenerator
         isEnabledByDefault: true
     );
 
-    public static readonly DiagnosticDescriptor AggregateFactoryArity = new(
-        "EZR012",
-        "Aggregate must declare exactly one factory entry point",
-        "Class '{0}' is marked [EZRestAPI.Aggregate] but declares {1} [EZRestAPI.Factory] entry point(s); mark exactly one public static factory method or public constructor",
-        Category,
-        DiagnosticSeverity.Error,
-        isEnabledByDefault: true
-    );
-
     public static readonly DiagnosticDescriptor CreateWithoutRead = new(
         "EZR013",
         "Create endpoint has an unreachable Location header",
@@ -163,13 +154,12 @@ public class DiagnosticsGenerator : IIncrementalGenerator
     {
         var modelsProvider = context.SyntaxProvider.GetModelsWithDiagnostics().Collect();
         var nestedProvider = context.SyntaxProvider.GetNestedModelsWithDiagnostics().Collect();
-        var aggregatesProvider = context.SyntaxProvider.GetAggregatesWithDiagnostics().Collect();
 
         context.RegisterSourceOutput(
-            modelsProvider.Combine(nestedProvider).Combine(aggregatesProvider),
+            modelsProvider.Combine(nestedProvider),
             (ctx, pair) =>
             {
-                var ((models, nestedModels), aggregates) = pair;
+                var (models, nestedModels) = pair;
 
                 foreach (var entry in models)
                 {
@@ -293,19 +283,12 @@ public class DiagnosticsGenerator : IIncrementalGenerator
                 }
 
                 // A class carrying both [Model] and [Nested] would get a DbSet
-                // AND an owned-type configuration, which EF rejects at runtime;
-                // [Model]+[Aggregate] mix the anemic and DDD paths on one class.
+                // AND an owned-type configuration, which EF rejects at runtime.
                 var nestedClassNames = new HashSet<string>(
                     nestedModels.Select(n => n.Nested.ClassName)
                 );
-                var aggregateClassNames = new HashSet<string>(
-                    aggregates.Select(a => a.Aggregate.ClassName)
-                );
                 foreach (
-                    var entry in models.Where(m =>
-                        nestedClassNames.Contains(m.Model.ClassName)
-                        || aggregateClassNames.Contains(m.Model.ClassName)
-                    )
+                    var entry in models.Where(m => nestedClassNames.Contains(m.Model.ClassName))
                 )
                 {
                     ctx.ReportDiagnostic(
@@ -315,23 +298,6 @@ public class DiagnosticsGenerator : IIncrementalGenerator
                             entry.Model.ModelName
                         )
                     );
-                }
-
-                // An aggregate needs exactly one creation entry point: zero
-                // makes it uncreatable, more than one makes creation ambiguous.
-                foreach (var entry in aggregates)
-                {
-                    if (entry.FactoryCount != 1)
-                    {
-                        ctx.ReportDiagnostic(
-                            Diagnostic.Create(
-                                AggregateFactoryArity,
-                                entry.Location?.ToLocation() ?? Location.None,
-                                entry.Aggregate.ModelName,
-                                entry.FactoryCount
-                            )
-                        );
-                    }
                 }
 
                 ReportDuplicates(

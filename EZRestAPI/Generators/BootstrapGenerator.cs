@@ -12,37 +12,27 @@ public class BootstrapGenerator : IIncrementalGenerator
     public void Initialize(IncrementalGeneratorInitializationContext context)
     {
         var modelsProvider = context.SyntaxProvider.GetModels().Collect();
-        var aggregatesProvider = context.SyntaxProvider.GetAggregates().Collect();
-        var combined = modelsProvider.Combine(aggregatesProvider);
 
         context.RegisterSourceOutput(
-            combined,
-            (ctx, pair) =>
+            modelsProvider,
+            (ctx, models) =>
             {
-                var (models, aggregates) = pair;
-
-                if (models.IsDefaultOrEmpty && aggregates.IsDefaultOrEmpty)
+                if (models.IsDefaultOrEmpty)
                 {
                     return;
                 }
 
-                var assemblyName = models.IsDefaultOrEmpty
-                    ? aggregates.First().AssemblyName
-                    : models.First().AssemblyName;
+                var assemblyName = models.First().AssemblyName;
 
-                // Every model and aggregate gets a `{Singular}Repository`, so all
-                // of them are registered.
-                var repositoryNames = models
-                    .Select(m => m.SingularName)
-                    .Concat(aggregates.Select(a => a.SingularName))
-                    .ToArray();
+                // Every model gets a `{Singular}Repository`, Endpoints.None
+                // included, so all of them are registered.
+                var repositoryNames = models.Select(m => m.SingularName).ToArray();
 
                 // Only non-None models get a `Map{Singular}Endpoints`; naming an
                 // Endpoints.None model here would dangle.
                 var endpointNames = models
                     .Where(m => m.Endpoints != ProviderExtensions.EndpointFeatures.None)
                     .Select(m => m.SingularName)
-                    .Concat(aggregates.Select(a => a.SingularName))
                     .ToArray();
 
                 var writer = SourceWriter.Create();

@@ -36,25 +36,6 @@ public class ModelGenerator : IIncrementalGenerator
                 );
             }
         );
-
-        var aggregatesProvider = context.SyntaxProvider.GetAggregates();
-
-        context.RegisterSourceOutput(
-            aggregatesProvider,
-            (ctx, aggregate) =>
-            {
-                // The aggregate is never object-initialized from generated
-                // code, so EF materializes the key through a private setter,
-                // keeping invariants encapsulated.
-                EmitIdPartial(
-                    ctx,
-                    aggregate.ModelNamespace,
-                    aggregate.ModelName,
-                    "public int Id { get; private set; }",
-                    $"{aggregate.ModelName}.Id.g.cs"
-                );
-            }
-        );
     }
 
     private static void EmitIdPartial(
