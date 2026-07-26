@@ -7,7 +7,7 @@ no life of its own — a value object or a child entity. It maps to an EF Core
 Owned data has no routes and no id of its own. You send it inside the parent and
 read it back inside the parent. Deleting the parent deletes it too.
 
-Nested types are used by both `[Model]` and `[Aggregate]`.
+Nested types are used by `[Model]`.
 
 ## Shapes
 
@@ -17,15 +17,13 @@ A property on the owner decides how it maps:
 | --- | --- |
 | A single `[Nested]` type (`Address Address`) | `OwnsOne` |
 | A collection of a `[Nested]` type | `OwnsMany` |
-| A collection of a primitive (`IReadOnlyList<string>`) | `PrimitiveCollection`, with field access |
 
 Supported collection types are `List<T>`, `IList<T>`, `ICollection<T>`,
 `IReadOnlyList<T>`, and `IReadOnlyCollection<T>`. Anything else raises `EZR009`.
 
-The two read-only interfaces matter for aggregates: a get-only
-`IReadOnlyList<InvoiceLine>` over a private backing list is the idiomatic DDD
-projection, and it must map as `OwnsMany` with the element exposed as
-`InvoiceLineDto` — not as the raw domain entity.
+Every shape needs a public getter and setter, the read-only interfaces
+included: `IReadOnlyList<Reaction> { get; set; }` maps as `OwnsMany` with the
+element exposed as `ReactionDto`, never as the owning type.
 
 ## Nesting
 

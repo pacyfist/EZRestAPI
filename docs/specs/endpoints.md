@@ -34,9 +34,8 @@ So `Endpoints.None` still gives you a full, typed way to read and write the
 table. It just gives you no HTTP.
 
 That is the point. `None` means "I do not want routes", not "I do not want data
-access". You still want to use the table from a job, from an endpoint you write
-yourself, or from the code around an `[Aggregate]` — see
-[model-vs-aggregate.md](model-vs-aggregate.md).
+access". You still want to use the table from a job or from an endpoint you
+write yourself.
 
 The same reasoning covers partial flags. `Endpoints.List` alone still yields
 `CreateAsync`, `UpdateAsync`, `DeleteAsync` and their request DTOs, because the
@@ -81,7 +80,7 @@ For plural name `Posts`, the path is the plural lowercased.
 
 `Nested` has no route of its own. It switches on the nested *form* of whichever
 verbs are also set. So `Endpoints.Nested` alone generates no route at all
-(`EZR015`), and `Endpoints.Crud` deliberately omits `Nested` to mean "full
+(`EZR014`), and `Endpoints.Crud` deliberately omits `Nested` to mean "full
 CRUD, flat routes only". The whole nested group — its `MapGroup` line included —
 is skipped when no nested route survives, so no empty group is ever emitted.
 
@@ -116,14 +115,9 @@ It is generated once per assembly as `PagedResponse<T>`.
 
 ## Diagnostics
 
-`EZR013` (Warning) fires on `Create` without `Read`. `EZR014` (Info) says a model
-publishes no routes. `EZR015` (Info) fires when a non-zero value selects no verb.
+`EZR012` (Warning) fires on `Create` without `Read`. `EZR013` (Info) says a model
+publishes no routes. `EZR014` (Info) fires when a non-zero value selects no verb.
 See [diagnostics.md](diagnostics.md).
-
-## Aggregates are not covered
-
-`[Aggregate]` has no flags — its surface is all-or-nothing. See
-[aggregates.md](aggregates.md).
 
 ## Reading the flag inside the generator
 

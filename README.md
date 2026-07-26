@@ -19,7 +19,6 @@ code for a working REST API. You only add attributes to your own classes.
 - [Endpoints](#endpoints)
 - [Links between models](#links-between-models)
 - [Owned data](#owned-data)
-- [Rich domain models (aggregates)](#rich-domain-models-aggregates)
 - [Errors](#errors)
 - [API docs (OpenAPI)](#api-docs-openapi)
 - [Build warnings](#build-warnings)
@@ -81,14 +80,10 @@ The path is the plural name, lowercased (`/books`):
 
 ## Your models
 
-There are two kinds of class:
-
-- `[Model]` — an **Entity Framework Core model**. A table with columns. Plain
-  data. This section covers it.
-- `[Aggregate]` — a **domain entity (DDD)**. A class with rules it will not let
-  you break. See [Rich domain models](#rich-domain-models-aggregates).
-
-Use `[Model]` unless the class has a rule to protect. A class cannot be both.
+A `[Model]` is an **Entity Framework Core model**: a table with columns, plain
+data. It holds no rules, so the generator can create, replace and delete the
+whole object. A class with rules about its own state is a poor fit — write that
+API by hand.
 
 A model is a plain C# class. Mark it `partial` and add `[EZRestAPI.Model]` with a
 singular and a plural name. At compile time, EZRestAPI reads the class and always writes:
@@ -223,18 +218,18 @@ foreign key that would otherwise make it nestable.
 
 ### Three diagnostics watch this
 
-- `EZR013` (Warning) — `Create` is set without `Read`. The `Create` response's
+- `EZR012` (Warning) — `Create` is set without `Read`. The `Create` response's
   `Location` header points at the `Read` route, which doesn't exist without it,
   so the header would point nowhere.
-- `EZR014` (Info) — the model is `Endpoints.None`, so it publishes no routes.
+- `EZR013` (Info) — the model is `Endpoints.None`, so it publishes no routes.
   The table, the DTOs and the repository are still there; only the endpoint
   class is not.
-- `EZR015` (Info) — the model's `Endpoints` is non-zero but selects no verb, so
+- `EZR014` (Info) — the model's `Endpoints` is non-zero but selects no verb, so
   again no route is generated. `Endpoints.Nested` alone is the common way to hit
   this: it only switches the nested *form* of whichever verbs are also set, so
   on its own it selects nothing.
 
-`EZR014` and `EZR015` are both informational, not mistakes, but easy to miss:
+`EZR013` and `EZR014` are both informational, not mistakes, but easy to miss:
 MSBuild's console logger hides Info diagnostics at the default verbosity, so
 if a model you expected to have an API doesn't, rebuild with `-v detailed` to
 see them (an IDE shows them as normal).
@@ -352,127 +347,6 @@ public partial class SensorReadingModel
 }
 ```
 
-## Rich domain models (aggregates)
-
-An aggregate is a **domain entity** (DDD). It is shaped by your domain, not by a
-table, and it guards its own state.
-
-Some classes have rules to protect. A plain `[Model]` gives you a `PUT` that overwrites every
-field. That is fine for simple data, but wrong when the class must guard its own state.
-
-An aggregate fixes this. You do not overwrite it. You **create** it through one factory, and you
-**change** it through named actions. Nothing else can touch its insides.
-
-### Mark the class
-
-Use `[EZRestAPI.Aggregate("Order", "Orders")]` (singular, plural). Add a private
-parameterless constructor so EF Core can load rows from the database. Mark it `partial` so the
-generator can add code to it.
-
-```csharp
-[EZRestAPI.Aggregate("Order", "Orders")]
-public partial class Order
-{
-    private Order() { } // EF needs this
-}
-```
-
-### Create it with a [Factory]
-
-One method makes new orders. Mark it `[EZRestAPI.Factory]`. It can be a static method
-(like below) **or** a public constructor. Its parameters become the request body.
-
-```csharp
-[EZRestAPI.Factory]
-public static Order Place(CustomerRef customer)
-{
-    return new Order { Customer = customer, Status = "Placed" };
-}
-```
-
-This gives you `POST /orders` which returns `201 Created`.
-
-### Read shows read-only fields too
-
-Fields with `private set`, get-only, or `init` still show up when you read the order. So
-`Status` and the `Lines` list below are returned even though outside code cannot set them.
-
-```csharp
-public string Status { get; private set; } = "";
-public IReadOnlyList<string> Lines => _lines;   // read-only view over a private list
-private readonly List<string> _lines = new();
-```
-
-### Change it with [Command] actions
-
-Each `[EZRestAPI.Command]` method becomes its own `POST` action. You can pass a route name
-(`[Command("cancel")]`), or leave it blank and the method name is turned into kebab-case
-(`AddLine` -> `add-line`). Parameters become the request body.
-
-```csharp
-[EZRestAPI.Command("cancel")]
-public void Cancel()
-{
-    if (Status == "Shipped")
-        throw new InvalidOperationException("Cannot cancel a shipped order.");
-    Status = "Cancelled";
-}
-
-[EZRestAPI.Command]                       // route: add-line
-public void AddLine(string sku, int quantity)
-{
-    if (quantity <= 0) throw new ArgumentOutOfRangeException(nameof(quantity));
-    _lines.Add($"{sku} x{quantity}");
-}
-```
-
-You get:
-
-```
-POST /orders/{id}/cancel
-POST /orders/{id}/add-line
-```
-
-Each one loads the saved order, runs the method, saves it, and returns `200 OK` with the
-updated order. If no order has that id, you get `404`.
-
-There is **no PUT** for aggregates. That is the whole point: you change them only through
-these named actions.
-
-### The error rule
-
-Your methods throw normal exceptions. The generator maps them to status codes:
-
-- Bad input (`ArgumentException` and any subclass, like `ArgumentOutOfRangeException`) -> **422**
-- Wrong state (`InvalidOperationException`) -> **409**
-
-So `AddLine` with `quantity = 0` returns 422. `Cancel` on a shipped order returns 409. Both
-come back as `application/problem+json`.
-
-### Value objects and child lists
-
-Parts that live inside the aggregate are `[EZRestAPI.Nested]` owned types (see
-[Owned data](#owned-data)). They have no routes of their own; they travel with the aggregate. A
-get-only `IReadOnlyList<Child>` shows up in reads as a list of `{Child}Dto`.
-
-```csharp
-[EZRestAPI.Nested("CustomerRef")]
-public class CustomerRef
-{
-    public required string Name { get; set; }
-    public required string Email { get; set; }
-}
-```
-
-### See the full examples
-
-- `Example/Models/OrderAggregate.cs` — static-method factory, a `cancel` command, and a
-  string-list projection.
-- `Example/Models/InvoiceAggregate.cs` — a child-entity list (`InvoiceLine`) mapped as an
-  owned collection.
-- `Example/Models/ShoppingCartAggregate.cs` — a factory that is a public constructor instead
-  of a static method.
-
 ## Errors
 
 Every error comes back as `application/problem+json` (RFC 9457). The body has the same fields each time:
@@ -489,12 +363,12 @@ Common status codes and when you get them:
 
 | Status | Meaning | When |
 | --- | --- | --- |
-| 200 OK | Success with a body | Read one, list, or run an aggregate command |
+| 200 OK | Success with a body | Read one, or list |
 | 201 Created | Made a new thing | POST create |
 | 204 No Content | Success, empty body | PUT update, DELETE |
 | 404 Not Found | The thing is not there | Missing id, missing nested parent, or a scoped id that does not match |
-| 409 Conflict | The action clashes with the current state | Delete a parent that still has children; an aggregate command that throws `InvalidOperationException` |
-| 422 Unprocessable Entity | The request was understood but not valid | Failed validation, a bad foreign key in the body, `page`/`pageSize` below 1, or an aggregate command that throws `ArgumentException` |
+| 409 Conflict | The action clashes with the current state | Delete a parent that still has children |
+| 422 Unprocessable Entity | The request was understood but not valid | Failed validation, a bad foreign key in the body, or `page`/`pageSize` below 1 |
 
 ## API docs (OpenAPI)
 
@@ -526,12 +400,11 @@ The generator checks your models at compile time. Most problems stop the build (
 | EZR007 | Error | An `Id` property is not an `int`; only `int` keys work. |
 | EZR008 | Error | A name you gave is not a valid C# identifier. |
 | EZR009 | Error | Nested items sit in an unsupported collection; use `List<T>`, `IList<T>`, `ICollection<T>`, `IReadOnlyList<T>`, or `IReadOnlyCollection<T>`. |
-| EZR010 | Error | A class has `[Model]` plus `[Nested]` (or `[Model]` plus `[Aggregate]`); pick one. |
+| EZR010 | Error | A class has `[Model]` plus `[Nested]`; pick one. |
 | EZR011 | Warning | A property looks like a foreign key (`XId`) but no `[Model]` has singular name `X`; add that model, or mark it `[Scalar]`. |
-| EZR012 | Error | An `[Aggregate]` does not have exactly one `[Factory]` entry point. |
-| EZR013 | Warning | `Endpoints.Create` is set without `Endpoints.Read`, so the `Create` response's `Location` header points at a `GET` route that does not exist. |
-| EZR014 | Info | The model has `Endpoints.None` (the default), so it publishes no routes. The table, DTOs and repository are still generated. If this is a surprise, add an `Endpoints` value to `[Model]`. Console builds hide Info diagnostics at the default verbosity; run with `-v detailed` to see it (an IDE shows it as usual). |
-| EZR015 | Info | The model's `Endpoints` selects no verb (`List`/`Create`/`Read`/`Update`/`Delete`) — for example `Endpoints.Nested` alone. Everything else is still generated, but no route is, since `Nested` only switches the *form* of a verb that must also be set. Add at least one verb. |
+| EZR012 | Warning | `Endpoints.Create` is set without `Endpoints.Read`, so the `Create` response's `Location` header points at a `GET` route that does not exist. |
+| EZR013 | Info | The model has `Endpoints.None` (the default), so it publishes no routes. The table, DTOs and repository are still generated. If this is a surprise, add an `Endpoints` value to `[Model]`. Console builds hide Info diagnostics at the default verbosity; run with `-v detailed` to see it (an IDE shows it as usual). |
+| EZR014 | Info | The model's `Endpoints` selects no verb (`List`/`Create`/`Read`/`Update`/`Delete`) — for example `Endpoints.Nested` alone. Everything else is still generated, but no route is, since `Nested` only switches the *form* of a verb that must also be set. Add at least one verb. |
 
 ## The Example project & tests
 
@@ -546,7 +419,6 @@ The generator checks your models at compile time. Most problems stop the build (
 - `AuditLogModel` — `Endpoints.None`: a table and a repository, but no routes.
 - `ExchangeRateModel` — `Endpoints.ReadOnly`: only the `GET` routes.
 - `AuditNoteModel` — `Endpoints.Crud`: a child of `AuditLogModel` whose nested routes are deliberately left off, so it only appears at its flat, top-level path.
-- `OrderAggregate`, `ShoppingCartAggregate` (constructor factory), `InvoiceAggregate` (`OwnsMany` child) — DDD aggregates.
 
 `Example/Program.cs` is the full wiring (`AddEZRestAPI`, `MapEZRestAPI`, OpenAPI).
 

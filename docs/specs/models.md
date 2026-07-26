@@ -5,16 +5,15 @@ columns. Plain data to store and serve. The generator reads it at compile time
 and writes the storage and API code for it.
 
 A model holds no rules, so the generator can own it fully — it creates,
-replaces and deletes the whole object. A class that *does* have rules to protect
-is an `[Aggregate]`; see [model-vs-aggregate.md](model-vs-aggregate.md).
+replaces and deletes the whole object. A class with rules about its own state is
+a poor fit; write that API by hand.
 
 ## Rules for the class
 
 - It must be `partial`, so the generator can add to it (`EZR001`).
 - The singular and plural names must be valid C# identifiers (`EZR008`).
 - No two models may share a singular name (`EZR002`) or a plural name (`EZR003`).
-- A class cannot be both `[Model]` and `[Nested]`, or both `[Model]` and
-  `[Aggregate]` (`EZR010`).
+- A class cannot be both `[Model]` and `[Nested]` (`EZR010`).
 
 ## The key
 
@@ -49,6 +48,14 @@ Two kinds of property are not columns:
 
 An `int`/`int?` property named `{Singular}Id` may be read as a foreign key —
 see [relationships.md](relationships.md).
+
+## Which shape for each part
+
+| The part | Use |
+| --- | --- |
+| Belongs to one parent, no id of its own | `[Nested]` |
+| Own table and id, no routes | `[Model]`, `Endpoints.None` |
+| Own table and its own CRUD routes | `[Model]` with endpoints |
 
 ## Validation
 

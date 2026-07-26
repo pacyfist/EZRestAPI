@@ -21,7 +21,6 @@ Microsoft REST guidelines, Google AIP, OpenAPI 3.1, and Stripe/GitHub practice.
 | 9 | `POST` create | `201`, a `Location` header holding the flat canonical URL, and the created representation. |
 | 10 | OpenAPI 3.1 | A stable `operationId`, a typed schema for every status including errors, one shared ProblemDetails schema, `tags` per resource. |
 | 11 | Naming | Paths plural, lowercase, kebab-case. JSON and query names camelCase. Id in the path. |
-| 12 | DDD | The aggregate root is the only addressable resource. Inner entities and value objects are embedded. Guarded transitions become command endpoints, not a `PUT` that sets a status. |
 
 ## Where EZRestAPI knowingly differs
 
@@ -65,7 +64,3 @@ an oversight.
   `type: [..., "null"]`.
 - **11.** Zalando rules 129 and 134 for paths; Microsoft for camelCase JSON.
   Verbs appear only in command sub-resources.
-- **12.** Evans and Vernon — the aggregate root is the consistency boundary and
-  therefore the only addressable resource. Google AIP-136 allows custom methods
-  for actions that do not fit the five standard ones, so cancel/ship/approve
-  become command endpoints.

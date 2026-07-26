@@ -11,7 +11,6 @@ ProviderExtensions  -- reads attributes, builds cached records
       |
       +-- GetModels / GetModelsWithRelationships   -> Model
       +-- GetNestedModels                          -> NestedModel
-      +-- GetAggregates                            -> Aggregate
       +-- Get*WithDiagnostics                      -> *Diagnostics (carry locations)
       |
       v
@@ -22,7 +21,7 @@ nine generators, each emitting its own .g.cs files
 
 | Generator | Output |
 | --- | --- |
-| `AttributesGenerator` | The public attributes and the `Endpoints` enum: `EZRestAPIModel`, `EZRestAPINested`, `EZRestAPIScalar`, `EZRestAPIAggregate`, `EZRestAPIFactory`, `EZRestAPICommand`, `EZRestAPIEndpoints` |
+| `AttributesGenerator` | The public attributes and the `Endpoints` enum: `EZRestAPIModel`, `EZRestAPINested`, `EZRestAPIScalar`, `EZRestAPIEndpoints` |
 | `ModelGenerator` | `{Model}.g.cs` — the `[Key] public int Id` on the user's partial class |
 | `DbContextGenerator` | `CustomDbContext.g.cs` — `DbSet`s, owned-type mapping, foreign keys |
 | `NestedGenerator` | `{Nested}Dto.g.cs` — one DTO and mappers per `[Nested]` type |
@@ -30,7 +29,7 @@ nine generators, each emitting its own .g.cs files
 | `RepositoryGenerator` | `{Model}Repository.g.cs` |
 | `EndpointsGenerator` | `{Model}Endpoints.g.cs` — the route mappings |
 | `BootstrapGenerator` | `EZRestAPIExtensions.g.cs` — `AddEZRestAPI()` and `MapEZRestAPI()` |
-| `DiagnosticsGenerator` | No source. Reports `EZR001`–`EZR015` |
+| `DiagnosticsGenerator` | No source. Reports `EZR001`–`EZR014` |
 
 Attributes are emitted through post-initialization output, so they exist before
 any user code is analysed.
@@ -105,13 +104,10 @@ Current coverage:
 | `BookModel` | A foreign key, so nested routes under `/authors` |
 | `ChapterModel` | A three-level chain, Author → Book → Chapter |
 | `ReviewModel` | Two foreign keys on one child |
-| `PostModel` → `CommentModel` → `ReactionModel` | A two-level owned collection |
+| `PostModel` → `CommentModel` → `ReactionModel` | A two-level owned collection, the inner one an `IReadOnlyList<T>` |
 | `ProfileModel` | A single owned reference (`OwnsOne`) |
 | `RegistrationModel` | Every validation attribute kind |
 | `SensorReadingModel` | `[Scalar]` opting an id-shaped field out |
 | `AuditLogModel` | `Endpoints.None` — storage with no API |
 | `AuditNoteModel` | `Endpoints.Crud` — flat routes only, under a `None` parent |
 | `ExchangeRateModel` | `Endpoints.ReadOnly` |
-| `OrderAggregate` | A static-method factory, a value object, a string projection, commands |
-| `ShoppingCartAggregate` | A constructor factory |
-| `InvoiceAggregate` | An `OwnsMany` child-entity collection |

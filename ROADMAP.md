@@ -24,13 +24,11 @@ Design docs live in [`docs/`](docs/).
   per resource, and a typed schema for every status including errors.
 - **Relationships.** `{Singular}Id` foreign keys by convention, flat and nested
   routes, parent scoping, `Restrict` on delete, `[Scalar]` to opt out.
-- **DDD aggregates.** `[Aggregate]` with `[Factory]` creation, `[Command]`
-  endpoints, encapsulated reads, and exception-to-status mapping. No `PUT`.
 - **Endpoint flags.** `[Model(..., Endpoints = ...)]`, opt-in, choosing which
   routes are generated. Presets `Crud`, `ReadOnly`, `All`. The flags control
   routes only — the `Id`, `DbSet`, DTOs and repository are always generated, so
   `Endpoints.None` gives a typed way to use a table without publishing it.
-- **Example feature tour.** Fifteen models covering every feature, each backed
+- **Example feature tour.** Twelve models covering every feature, each backed
   by an OpenAPI assertion and, where it has runtime behaviour, an integration
   test.
 
@@ -58,8 +56,6 @@ flags were the first opt-out; these are the rest.
       add rate limiting, caching or filters per model without forking.
 - [ ] **Optimistic concurrency.** An opt-in `rowversion` property → `ETag` on
       `GET`, `If-Match` required on `PUT`/`DELETE`, `412` on mismatch.
-- [ ] **Endpoint flags for `[Aggregate]`.** Deliberately left out of the
-      `[Model]` work.
 
 ## Next — EF-faithful relationships
 
@@ -121,3 +117,7 @@ evidence, and evidence comes last.
 - Multi-tenancy, CQRS, event sourcing, message-bus integration.
 - Replacing hand-written APIs that hold real domain logic. EZRestAPI targets the
   CRUD-shaped 80%, and should say so loudly.
+- Rich domain models. `[Factory]` creation and command endpoints were built and
+  then removed: a class with rules about its own state is better served by a
+  hand-written API, and carrying a second kind of class doubled the surface of
+  every other feature.

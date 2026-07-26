@@ -42,12 +42,12 @@ the same shape.
 
 | Status | When |
 | --- | --- |
-| `200 OK` | Read one, list, or run an aggregate command |
+| `200 OK` | Read one, or list |
 | `201 Created` | `POST` create. `Location` is always the flat item URL |
 | `204 No Content` | `PUT` update, `DELETE` |
 | `404 Not Found` | Missing id; missing parent named in the path; an item that does not belong to the parent in the path |
-| `409 Conflict` | Deleting a parent that still has children; an aggregate command that throws `InvalidOperationException` |
-| `422 Unprocessable Entity` | Failed validation; a foreign key in the **body** that does not exist; `page` or `pageSize` below 1; an aggregate command that throws `ArgumentException` |
+| `409 Conflict` | Deleting a parent that still has children |
+| `422 Unprocessable Entity` | Failed validation; a foreign key in the **body** that does not exist; `page` or `pageSize` below 1 |
 
 Two distinctions carry most of this:
 
@@ -95,7 +95,6 @@ also declares the statuses it can actually return:
 | Nested list / read | 404 |
 | Nested update | 422, 404 |
 | Nested delete | 404, 409 |
-| Aggregate command | 404, 409, 422 |
 
 Every route also carries:
 
