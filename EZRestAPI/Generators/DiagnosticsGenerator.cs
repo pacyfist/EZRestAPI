@@ -38,7 +38,7 @@ public class DiagnosticsGenerator : IIncrementalGenerator
     public static readonly DiagnosticDescriptor ModelUsedAsNavigation = new(
         "EZR004",
         "Model type used as a navigation property",
-        "Property '{0}' on '{1}' references an [EZRestAPI.Model] type; reference aggregate roots by id instead, or mark the property type [EZRestAPI.Nested]",
+        "Property '{0}' on '{1}' references an [EZRestAPI.Model] type; reference the other model by id instead, or mark the property type [EZRestAPI.Nested]",
         Category,
         DiagnosticSeverity.Error,
         isEnabledByDefault: true
@@ -108,7 +108,7 @@ public class DiagnosticsGenerator : IIncrementalGenerator
     );
 
     public static readonly DiagnosticDescriptor CreateWithoutRead = new(
-        "EZR013",
+        "EZR012",
         "Create endpoint has an unreachable Location header",
         "Model '{0}' generates a Create endpoint whose Location header points at '/{1}/{{id}}', but Endpoints.Read is not set",
         Category,
@@ -117,7 +117,7 @@ public class DiagnosticsGenerator : IIncrementalGenerator
     );
 
     public static readonly DiagnosticDescriptor NoEndpointsGenerated = new(
-        "EZR014",
+        "EZR013",
         "Model publishes no routes",
         "Model '{0}' generates its table, DTOs and repository but no routes; set Endpoints on [EZRestAPI.Model] to publish some",
         Category,
@@ -125,12 +125,12 @@ public class DiagnosticsGenerator : IIncrementalGenerator
         isEnabledByDefault: true
     );
 
-    // EZR014 and EZR015 both mean "no routes", so they must not both fire.
-    // EZR014 is the Endpoints.None case; EZR015 is the narrower one where the
+    // EZR013 and EZR014 both mean "no routes", so they must not both fire.
+    // EZR013 is the Endpoints.None case; EZR014 is the narrower one where the
     // flags are non-zero but still select no verb (Nested alone, say), which
     // additionally emits an endpoint class that maps nothing.
     public static readonly DiagnosticDescriptor NoEndpointVerbsSelected = new(
-        "EZR015",
+        "EZR014",
         "Model selects no endpoint verbs",
         "Model '{0}' selects no endpoint verbs, so no routes are generated; add at least one of List, Create, Read, Update or Delete",
         Category,

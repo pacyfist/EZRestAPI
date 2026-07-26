@@ -16,7 +16,6 @@ EZR008 | EZRestAPI | Error | Name is not a valid identifier
 EZR009 | EZRestAPI | Error | Unsupported container for a nested model
 EZR010 | EZRestAPI | Error | Class is both a model and a nested model
 EZR011 | EZRestAPI | Warning | Foreign-key-shaped property has no matching model
-EZR012 | EZRestAPI | Error | Aggregate must declare exactly one factory entry point
-EZR013 | EZRestAPI | Warning | Create endpoint has an unreachable Location header
-EZR014 | EZRestAPI | Info | Model generates no API surface
-EZR015 | EZRestAPI | Info | Model selects no endpoint verbs
+EZR012 | EZRestAPI | Warning | Create endpoint has an unreachable Location header
+EZR013 | EZRestAPI | Info | Model generates no API surface
+EZR014 | EZRestAPI | Info | Model selects no endpoint verbs

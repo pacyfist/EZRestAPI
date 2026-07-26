@@ -570,18 +570,18 @@ public class EndpointFlagsTests
     }
 
     [Fact]
-    public void EZR013_FiresWhenCreateIsSetWithoutRead()
+    public void EZR012_FiresWhenCreateIsSetWithoutRead()
     {
-        Assert.Contains("EZR013", DiagnosticsFor(", Endpoints = EZRestAPI.Endpoints.Create"));
+        Assert.Contains("EZR012", DiagnosticsFor(", Endpoints = EZRestAPI.Endpoints.Create"));
     }
 
     [Theory]
     [InlineData(", Endpoints = EZRestAPI.Endpoints.Create")]
     [InlineData(", Endpoints = EZRestAPI.Endpoints.Create | EZRestAPI.Endpoints.Update")]
     [InlineData(", Endpoints = EZRestAPI.Endpoints.Create | EZRestAPI.Endpoints.Delete")]
-    public void EZR013_FiresForAnyCombinationWithCreateAndWithoutRead(string flags)
+    public void EZR012_FiresForAnyCombinationWithCreateAndWithoutRead(string flags)
     {
-        Assert.Contains("EZR013", DiagnosticsFor(flags));
+        Assert.Contains("EZR012", DiagnosticsFor(flags));
     }
 
     [Theory]
@@ -590,14 +590,14 @@ public class EndpointFlagsTests
     [InlineData(", Endpoints = EZRestAPI.Endpoints.None")]
     [InlineData(", Endpoints = EZRestAPI.Endpoints.Create | EZRestAPI.Endpoints.Read")]
     [InlineData("")]
-    public void EZR013_DoesNotFireOtherwise(string flags)
+    public void EZR012_DoesNotFireOtherwise(string flags)
     {
-        Assert.DoesNotContain("EZR013", DiagnosticsFor(flags));
+        Assert.DoesNotContain("EZR012", DiagnosticsFor(flags));
     }
 
     /// <summary>
     /// Forces <c>Diagnostic.GetMessage()</c> to run <c>string.Format</c> against
-    /// the EZR013 message format, which is the only way to catch the
+    /// the EZR012 message format, which is the only way to catch the
     /// unescaped-<c>{id}</c> hazard: an id-only assertion would still pass
     /// even if <c>string.Format</c> threw when a real consumer (an IDE, or
     /// <c>msbuild</c>) rendered the message. This also pins the route segment
@@ -606,10 +606,10 @@ public class EndpointFlagsTests
     /// text can't drift from the actual generated URL.
     /// </summary>
     [Fact]
-    public void EZR013_MessageIsFormattedCorrectlyWithLiteralIdToken()
+    public void EZR012_MessageIsFormattedCorrectlyWithLiteralIdToken()
     {
         var diagnostic = RawDiagnosticsFor(", Endpoints = EZRestAPI.Endpoints.Create")
-            .Single(d => d.Id == "EZR013");
+            .Single(d => d.Id == "EZR012");
 
         Assert.Equal(
             "Model 'BookModel' generates a Create endpoint whose Location header points at '/books/{id}', but Endpoints.Read is not set",
@@ -620,20 +620,20 @@ public class EndpointFlagsTests
     [Theory]
     [InlineData("")]
     [InlineData(", Endpoints = EZRestAPI.Endpoints.None")]
-    public void EZR014_FiresWhenNoEndpointsAreSelected(string flags)
+    public void EZR013_FiresWhenNoEndpointsAreSelected(string flags)
     {
-        Assert.Contains("EZR014", DiagnosticsFor(flags));
+        Assert.Contains("EZR013", DiagnosticsFor(flags));
     }
 
     /// <summary>
-    /// Same rationale as <see cref="EZR013_MessageIsFormattedCorrectlyWithLiteralIdToken"/>:
-    /// forces <c>string.Format</c> to actually run against the EZR014 message
+    /// Same rationale as <see cref="EZR012_MessageIsFormattedCorrectlyWithLiteralIdToken"/>:
+    /// forces <c>string.Format</c> to actually run against the EZR013 message
     /// format rather than trusting an id-only assertion.
     /// </summary>
     [Fact]
-    public void EZR014_MessageIsFormattedCorrectly()
+    public void EZR013_MessageIsFormattedCorrectly()
     {
-        var diagnostic = RawDiagnosticsFor("").Single(d => d.Id == "EZR014");
+        var diagnostic = RawDiagnosticsFor("").Single(d => d.Id == "EZR013");
 
         Assert.Equal(
             "Model 'BookModel' generates its table, DTOs and repository but no routes; set Endpoints on [EZRestAPI.Model] to publish some",
@@ -645,58 +645,58 @@ public class EndpointFlagsTests
     [InlineData(", Endpoints = EZRestAPI.Endpoints.All")]
     [InlineData(", Endpoints = EZRestAPI.Endpoints.ReadOnly")]
     [InlineData(", Endpoints = EZRestAPI.Endpoints.List")]
-    public void EZR014_DoesNotFireForAnyNonZeroCombination(string flags)
+    public void EZR013_DoesNotFireForAnyNonZeroCombination(string flags)
     {
-        Assert.DoesNotContain("EZR014", DiagnosticsFor(flags));
+        Assert.DoesNotContain("EZR013", DiagnosticsFor(flags));
     }
 
     /// <summary>
     /// Endpoints.Nested alone sets no flat verb, and EmitsNestedGroup requires
     /// Nested AND at least one verb, so this selects no route at all — yet the
     /// endpoint CLASS is still generated, since flags != None. That is the gap
-    /// EZR015 exists to flag; EZR014 only fires on flags == None.
+    /// EZR014 exists to flag; EZR013 only fires on flags == None.
     /// </summary>
     [Fact]
-    public void EZR015_FiresWhenNestedIsSetAloneWithNoVerb()
+    public void EZR014_FiresWhenNestedIsSetAloneWithNoVerb()
     {
-        Assert.Contains("EZR015", DiagnosticsFor(", Endpoints = EZRestAPI.Endpoints.Nested"));
+        Assert.Contains("EZR014", DiagnosticsFor(", Endpoints = EZRestAPI.Endpoints.Nested"));
     }
 
     /// <summary>
-    /// Endpoints.List selects a verb, so a route is generated and EZR015 must
+    /// Endpoints.List selects a verb, so a route is generated and EZR014 must
     /// not fire. This guards against a broadened condition that accidentally
     /// fires whenever Nested is absent, rather than only when no verb survives.
     /// </summary>
     [Fact]
-    public void EZR015_DoesNotFireWhenAVerbIsSelected()
+    public void EZR014_DoesNotFireWhenAVerbIsSelected()
     {
-        Assert.DoesNotContain("EZR015", DiagnosticsFor(", Endpoints = EZRestAPI.Endpoints.List"));
+        Assert.DoesNotContain("EZR014", DiagnosticsFor(", Endpoints = EZRestAPI.Endpoints.List"));
     }
 
     /// <summary>
-    /// flags == None must keep firing EZR014, not EZR015: the two are mutually
+    /// flags == None must keep firing EZR013, not EZR014: the two are mutually
     /// exclusive branches over the same "no routes generated" family, and None
     /// is the pre-existing, already-tested case (no repository/DTOs either).
     /// </summary>
     [Fact]
-    public void EZR014_StillFiresForNoneNotEZR015()
+    public void EZR013_StillFiresForNoneNotEZR014()
     {
         var ids = DiagnosticsFor(", Endpoints = EZRestAPI.Endpoints.None");
 
-        Assert.Contains("EZR014", ids);
-        Assert.DoesNotContain("EZR015", ids);
+        Assert.Contains("EZR013", ids);
+        Assert.DoesNotContain("EZR014", ids);
     }
 
     /// <summary>
-    /// Same rationale as <see cref="EZR014_MessageIsFormattedCorrectly"/>:
-    /// forces <c>string.Format</c> to actually run against the EZR015 message
+    /// Same rationale as <see cref="EZR013_MessageIsFormattedCorrectly"/>:
+    /// forces <c>string.Format</c> to actually run against the EZR014 message
     /// format rather than trusting an id-only assertion.
     /// </summary>
     [Fact]
-    public void EZR015_MessageIsFormattedCorrectly()
+    public void EZR014_MessageIsFormattedCorrectly()
     {
         var diagnostic = RawDiagnosticsFor(", Endpoints = EZRestAPI.Endpoints.Nested")
-            .Single(d => d.Id == "EZR015");
+            .Single(d => d.Id == "EZR014");
 
         Assert.Equal(
             "Model 'BookModel' selects no endpoint verbs, so no routes are generated; add at least one of List, Create, Read, Update or Delete",
