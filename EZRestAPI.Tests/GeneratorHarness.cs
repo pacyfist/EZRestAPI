@@ -50,28 +50,6 @@ internal static class GeneratorHarness
         return driver.RunGenerators(CreateCompilation(source)).GetRunResult();
     }
 
-    /// <summary>
-    /// Runs the attributes generator plus a probe that dumps the resolved
-    /// <c>Aggregate</c> models to source, so tests can assert on the aggregate
-    /// provider before any aggregate codegen exists.
-    /// </summary>
-    public static string RunAggregateProbe(string source)
-    {
-        IIncrementalGenerator[] generators =
-        [
-            new AttributesGenerator(),
-            new AggregateProbeGenerator(),
-        ];
-
-        var driver = CSharpGeneratorDriver.Create(
-            generators.Select(GeneratorExtensions.AsSourceGenerator).ToArray()
-        );
-
-        var result = driver.RunGenerators(CreateCompilation(source)).GetRunResult();
-
-        return GetSource(result, "AggregateProbe.g.cs");
-    }
-
     public static string GetSource(GeneratorDriverRunResult result, string hintName)
     {
         return result

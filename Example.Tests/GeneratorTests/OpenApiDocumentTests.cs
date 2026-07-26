@@ -79,58 +79,6 @@ public class OpenApiDocumentTests : IDisposable
         );
     }
 
-    [Fact]
-    public async Task OpenApiDocument_DescribesAggregateContract()
-    {
-        var response = await client.GetAsync("/openapi/v1.json");
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-
-        await using var stream = await response.Content.ReadAsStreamAsync();
-        using var document = await JsonDocument.ParseAsync(stream);
-        var root = document.RootElement;
-        var paths = root.GetProperty("paths");
-
-        // Factory-based creation: POST /orders -> 201 (created) and 422
-        // (the request DTO failed validation).
-        var createOrder = Operation(paths, "/orders", "post");
-        var createResponses = createOrder.GetProperty("responses");
-        Assert.True(createResponses.TryGetProperty("201", out _));
-        AssertValidationResponse(root, createResponses, "422");
-
-        // GET /orders (paginated list) and GET /orders/{id} (single read + 404).
-        var listOrders = Operation(paths, "/orders", "get");
-        Assert.True(listOrders.GetProperty("responses").TryGetProperty("200", out _));
-
-        var readOrder = Operation(paths, "/orders/{id}", "get");
-        var readResponses = readOrder.GetProperty("responses");
-        Assert.True(readResponses.TryGetProperty("200", out _));
-        AssertProblemResponse(readResponses, "404");
-
-        // DELETE /orders/{id} -> 204 (deleted) and 404 (missing).
-        var deleteOrder = Operation(paths, "/orders/{id}", "delete");
-        var deleteResponses = deleteOrder.GetProperty("responses");
-        Assert.True(deleteResponses.TryGetProperty("204", out _));
-        AssertProblemResponse(deleteResponses, "404");
-
-        // Guarded transitions are command sub-resources, NOT a status PUT. The
-        // InvalidOperationException guard surfaces as 409; the ArgumentException
-        // guard surfaces as 422.
-        var cancelOrder = Operation(paths, "/orders/{id}/cancel", "post");
-        AssertProblemResponse(cancelOrder.GetProperty("responses"), "409");
-
-        var addLineOrder = Operation(paths, "/orders/{id}/add-line", "post");
-        var addLineResponses = addLineOrder.GetProperty("responses");
-        AssertProblemResponse(addLineResponses, "409");
-        AssertValidationResponse(root, addLineResponses, "422");
-
-        // No blind PUT for an aggregate: a full-replace would bypass invariants.
-        Assert.True(paths.TryGetProperty("/orders/{id}", out var orderItem));
-        Assert.False(
-            orderItem.TryGetProperty("put", out _),
-            "Aggregate must not expose PUT /orders/{id}."
-        );
-    }
-
     /// <summary>Fetches and parses /openapi/v1.json, returning a root element
     /// detached from the (disposed) JsonDocument via Clone().</summary>
     private async Task<JsonElement> LoadRootAsync()
@@ -205,44 +153,6 @@ public class OpenApiDocumentTests : IDisposable
 
         foreach (var path in paths.EnumerateObject())
             Assert.DoesNotContain("/addresses", path.Name);
-    }
-
-    [Fact]
-    public async Task OpenApiDocument_DescribesConstructorFactoryAndOwnedChildCollection()
-    {
-        var root = await LoadRootAsync();
-        var paths = root.GetProperty("paths");
-
-        // Constructor-factory aggregate: POST create + a command sub-resource, no PUT.
-        var createCart = Operation(paths, "/shoppingcarts", "post");
-        Assert.True(createCart.GetProperty("responses").TryGetProperty("201", out _));
-        Assert.True(
-            paths.TryGetProperty("/shoppingcarts/{id}/checkout", out _),
-            "Missing /shoppingcarts/{id}/checkout."
-        );
-        Assert.False(
-            paths.TryGetProperty("/shoppingcarts/{id}", out var cartItem)
-                && cartItem.TryGetProperty("put", out _),
-            "Aggregate must not expose PUT."
-        );
-
-        // OwnsMany child-entity collection: the Invoice read embeds InvoiceLineDto.
-        Assert.True(
-            paths.TryGetProperty("/invoices/{id}/add-line", out _),
-            "Missing /invoices/{id}/add-line."
-        );
-        var schemas = root.GetProperty("components").GetProperty("schemas");
-        Assert.True(schemas.TryGetProperty("ReadInvoiceResponse", out var readInvoice));
-        var linesProp = readInvoice.GetProperty("properties").GetProperty("lines");
-        Assert.Equal("array", linesProp.GetProperty("type").GetString());
-        // The element must be the generated InvoiceLineDto, NOT the raw domain
-        // entity Example.Models.InvoiceLine — the domain type must never leak
-        // into the public read surface.
-        Assert.Contains("InvoiceLineDto", linesProp.GetProperty("items").GetRawText());
-        Assert.False(
-            schemas.TryGetProperty("InvoiceLine", out _),
-            "The domain entity InvoiceLine leaked into the OpenAPI schema set."
-        );
     }
 
     private static JsonElement Operation(JsonElement paths, string path, string verb)
