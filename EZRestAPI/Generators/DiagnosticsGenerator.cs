@@ -127,18 +127,17 @@ public class DiagnosticsGenerator : IIncrementalGenerator
 
     public static readonly DiagnosticDescriptor NoEndpointsGenerated = new(
         "EZR014",
-        "Model generates no API surface",
-        "Model '{0}' is registered in the DbContext only; set Endpoints on [EZRestAPI.Model] to generate a repository, DTOs and endpoints",
+        "Model publishes no routes",
+        "Model '{0}' generates its table, DTOs and repository but no routes; set Endpoints on [EZRestAPI.Model] to publish some",
         Category,
         DiagnosticSeverity.Info,
         isEnabledByDefault: true
     );
 
-    // Endpoints != None still emits the repository, DTOs and bootstrap
-    // registration (DtoGenerator/RepositoryGenerator/BootstrapGenerator all key
-    // off flags != None, not off "a verb is selected"), so EZR014's "registered
-    // in the DbContext only" wording would be inaccurate here; EZR015 covers the
-    // narrower "no route can ever be emitted" case instead.
+    // EZR014 and EZR015 both mean "no routes", so they must not both fire.
+    // EZR014 is the Endpoints.None case; EZR015 is the narrower one where the
+    // flags are non-zero but still select no verb (Nested alone, say), which
+    // additionally emits an endpoint class that maps nothing.
     public static readonly DiagnosticDescriptor NoEndpointVerbsSelected = new(
         "EZR015",
         "Model selects no endpoint verbs",

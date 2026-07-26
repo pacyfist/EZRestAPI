@@ -151,11 +151,8 @@ public class DtoGenerator : IIncrementalGenerator
             relModelsProvider,
             (ctx, model) =>
             {
-                if (model.Endpoints == ProviderExtensions.EndpointFeatures.None)
-                {
-                    return;
-                }
-
+                // Emitted whatever the flags say — the repository consumes these
+                // whether or not any route does.
                 foreach (var rel in model.ParentRelationships)
                 {
                     EmitNestedDto(
@@ -434,11 +431,7 @@ public class DtoGenerator : IIncrementalGenerator
             modelsProvider,
             (ctx, model) =>
             {
-                if (model.Endpoints == ProviderExtensions.EndpointFeatures.None)
-                {
-                    return;
-                }
-
+                // Emitted whatever the flags say — see the note in Initialize.
                 var className = string.Format(classNameFormat, model.SingularName);
 
                 var writer = SourceWriter.Create();

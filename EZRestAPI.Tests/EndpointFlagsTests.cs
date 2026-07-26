@@ -363,8 +363,13 @@ public class EndpointFlagsTests
         Assert.DoesNotContain("DeleteBookUnderAuthorAsync", endpoints);
     }
 
+    /// <summary>
+    /// Endpoints controls routes and nothing else, so None keeps the full
+    /// repository and DTO surface. Withholding them would leave a stored model
+    /// with no typed way to reach its own table.
+    /// </summary>
     [Fact]
-    public void None_GeneratesNoRepositoryAndNoDtos()
+    public void None_StillGeneratesTheRepositoryAndDtos()
     {
         var result = GeneratorHarness.Run(
             """
@@ -375,11 +380,14 @@ public class EndpointFlagsTests
             """
         );
 
-        Assert.False(HasSource(result, "BookRepository.g.cs"));
-        Assert.False(HasSource(result, "CreateBookRequest.g.cs"));
-        Assert.False(HasSource(result, "CreateBookResponse.g.cs"));
-        Assert.False(HasSource(result, "ReadBookResponse.g.cs"));
-        Assert.False(HasSource(result, "UpdateBookRequest.g.cs"));
+        Assert.True(HasSource(result, "BookRepository.g.cs"));
+        Assert.True(HasSource(result, "CreateBookRequest.g.cs"));
+        Assert.True(HasSource(result, "CreateBookResponse.g.cs"));
+        Assert.True(HasSource(result, "ReadBookResponse.g.cs"));
+        Assert.True(HasSource(result, "UpdateBookRequest.g.cs"));
+
+        // The routes are the part that None withholds.
+        Assert.False(HasSource(result, "BookEndpoints.g.cs"));
     }
 
     [Fact]
@@ -444,15 +452,12 @@ public class EndpointFlagsTests
     }
 
     /// <summary>
-    /// Flags are deliberately asymmetric (parent All, child None) so this test
-    /// can only pass if the CHILD's flags gate its own nested DTOs
-    /// (<c>DtoGenerator.cs</c> checks the model being iterated, which for a
-    /// child's nested-under-parent DTOs is the child itself). With both sides
-    /// at None, this would pass equally well against a (wrong) parent-side
-    /// gate, so the nested-DTO gate would be untested; see the converse below.
+    /// A None child still gets its nested DTOs, because its repository still
+    /// gets the scoped Create{Child}Under{Parent}Async methods that consume
+    /// them. Withholding the DTOs would leave that repository uncompilable.
     /// </summary>
     [Fact]
-    public void NoneChild_DoesNotGenerateItsNestedDtos()
+    public void NoneChild_StillGeneratesItsNestedDtos()
     {
         var result = GeneratorHarness.Run(
             """
@@ -470,16 +475,15 @@ public class EndpointFlagsTests
             """
         );
 
-        Assert.False(HasSource(result, "CreateBookUnderAuthorRequest.g.cs"));
-        Assert.False(HasSource(result, "UpdateBookUnderAuthorRequest.g.cs"));
+        Assert.True(HasSource(result, "CreateBookUnderAuthorRequest.g.cs"));
+        Assert.True(HasSource(result, "UpdateBookUnderAuthorRequest.g.cs"));
     }
 
     /// <summary>
-    /// The converse of <see cref="NoneChild_DoesNotGenerateItsNestedDtos"/>: a
-    /// None parent does not suppress a child's nested DTOs, since the gate is
-    /// on the child. This is the design spec's stated "child under a None
-    /// parent" consequence — <see cref="NestedChild_UnderNoneParent_StillGeneratesNestedRoutes"/>
-    /// already covers it for routes, this covers it for DTOs.
+    /// A None parent does not suppress a child's nested DTOs either. This is the
+    /// "child under a None parent" consequence —
+    /// <see cref="NestedChild_UnderNoneParent_StillGeneratesNestedRoutes"/>
+    /// covers it for routes, this covers it for DTOs.
     /// </summary>
     [Fact]
     public void AllChild_UnderNoneParent_StillGeneratesItsNestedDtos()
@@ -504,8 +508,13 @@ public class EndpointFlagsTests
         Assert.True(HasSource(result, "UpdateBookUnderAuthorRequest.g.cs"));
     }
 
+    /// <summary>
+    /// The bootstrap splits: every model's repository is registered so it can be
+    /// injected, but only non-None models are mapped. Mapping a None model would
+    /// call a Map{Name}Endpoints() that was never generated.
+    /// </summary>
     [Fact]
-    public void Bootstrap_ExcludesNoneModelsAndKeepsTheRest()
+    public void Bootstrap_RegistersEveryRepositoryButMapsOnlyNonNone()
     {
         var result = GeneratorHarness.Run(
             """
@@ -522,8 +531,9 @@ public class EndpointFlagsTests
         var bootstrap = GeneratorHarness.GetSource(result, "EZRestAPIExtensions.g.cs");
 
         Assert.Contains("services.AddScoped<BookRepository>();", bootstrap);
+        Assert.Contains("services.AddScoped<AuthorRepository>();", bootstrap);
+
         Assert.Contains("app.MapBookEndpoints();", bootstrap);
-        Assert.DoesNotContain("AuthorRepository", bootstrap);
         Assert.DoesNotContain("MapAuthorEndpoints", bootstrap);
     }
 
@@ -626,7 +636,7 @@ public class EndpointFlagsTests
         var diagnostic = RawDiagnosticsFor("").Single(d => d.Id == "EZR014");
 
         Assert.Equal(
-            "Model 'BookModel' is registered in the DbContext only; set Endpoints on [EZRestAPI.Model] to generate a repository, DTOs and endpoints",
+            "Model 'BookModel' generates its table, DTOs and repository but no routes; set Endpoints on [EZRestAPI.Model] to publish some",
             diagnostic.GetMessage()
         );
     }
@@ -642,10 +652,9 @@ public class EndpointFlagsTests
 
     /// <summary>
     /// Endpoints.Nested alone sets no flat verb, and EmitsNestedGroup requires
-    /// Nested AND at least one verb, so this selects no route at all — the
-    /// endpoint class, repository and DTOs are still generated (flags != None),
-    /// which is exactly the gap EZR015 exists to flag since EZR014 only fires
-    /// on flags == None.
+    /// Nested AND at least one verb, so this selects no route at all — yet the
+    /// endpoint CLASS is still generated, since flags != None. That is the gap
+    /// EZR015 exists to flag; EZR014 only fires on flags == None.
     /// </summary>
     [Fact]
     public void EZR015_FiresWhenNestedIsSetAloneWithNoVerb()

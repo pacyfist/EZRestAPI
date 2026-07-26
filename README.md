@@ -24,6 +24,7 @@ code for a working REST API. You only add attributes to your own classes.
 - [API docs (OpenAPI)](#api-docs-openapi)
 - [Build warnings](#build-warnings)
 - [The Example project & tests](#the-example-project--tests)
+- [Design docs](#design-docs)
 
 ## Add it to your project
 
@@ -79,6 +80,15 @@ The path is the plural name, lowercased (`/books`):
 - `DELETE /books/{id}` — delete one. Returns `204 No Content`, or `404` if not found.
 
 ## Your models
+
+There are two kinds of class:
+
+- `[Model]` — an **Entity Framework Core model**. A table with columns. Plain
+  data. This section covers it.
+- `[Aggregate]` — a **domain entity (DDD)**. A class with rules it will not let
+  you break. See [Rich domain models](#rich-domain-models-aggregates).
+
+Use `[Model]` unless the class has a rule to protect. A class cannot be both.
 
 A model is a plain C# class. Mark it `partial` and add `[EZRestAPI.Model]` with a
 singular and a plural name. At compile time, EZRestAPI reads the class and always writes:
@@ -184,24 +194,24 @@ Combine flags with `|`, e.g. `Endpoints = EZRestAPI.Endpoints.List | EZRestAPI.E
 Three presets cover the common cases: `Crud` (every flat route, no nested routes),
 `ReadOnly` (read-only, flat and nested), and `All` (everything).
 
+### `Endpoints` only controls routes
+
+Whatever you set, you always get the same building blocks: the `Id`, the
+`DbSet`, the DTOs (`CreateBookRequest`, `ReadBookResponse`, and the rest), and
+the full repository — `CreateAsync`, `ReadAsync`, `ListAsync`, `UpdateAsync`,
+`DeleteAsync`. The flags decide which of those get an HTTP route.
+
+So `Endpoints.List` gives you one route and the whole repository. That is on
+purpose: the usual reason to leave out `Create` is that you want to hand-write
+`POST /books` yourself, and your version needs `CreateAsync` and
+`CreateBookRequest` to build on.
+
 ### The default is `None`
 
-Leave `Endpoints` off `[Model]` and you get `None`. The model is still registered
-on the `DbContext` and gets its `Id` — that much always happens — but nothing
-else: no repository, no DTOs, no routes, and it is left out of `AddEZRestAPI` and
-`MapEZRestAPI`. That is a supported way to persist a type with no API of its own;
-see `AuditLogModel` in [the Example project](#the-example-project--tests).
-
-### Any other value builds everything, and exposes only what you chose
-
-Set even one flag — say just `Endpoints.List` — and EZRestAPI still generates the
-*complete* repository and DTO surface: `CreateAsync`, `ReadAsync`, `UpdateAsync`,
-`DeleteAsync`, `ListAsync`, and every request/response type (`CreateBookRequest`,
-`UpdateBookRequest`, and so on). Only the routes for the flags you actually set
-get mapped. The usual reason to leave out `Create` is that you want to hand-write
-`POST /books` yourself — with `CreateAsync` and `CreateBookRequest` already there,
-your replacement endpoint has something to build on instead of writing that
-plumbing from scratch.
+Leave `Endpoints` off `[Model]` and you get `None`. You get the table and the
+repository, but no routes, and the model is left out of `MapEZRestAPI`. Use it
+when you want to store and use a type without publishing it — see
+`AuditLogModel` in [the Example project](#the-example-project--tests).
 
 ### `Nested` is ANDed with the verbs, not added to them
 
@@ -216,13 +226,13 @@ foreign key that would otherwise make it nestable.
 - `EZR013` (Warning) — `Create` is set without `Read`. The `Create` response's
   `Location` header points at the `Read` route, which doesn't exist without it,
   so the header would point nowhere.
-- `EZR014` (Info) — the model is `Endpoints.None` and generates no API surface
-  at all: no repository, no DTOs, no endpoint class, just the `DbSet`.
-- `EZR015` (Info) — the model's `Endpoints` is non-zero (so the repository,
-  DTOs and endpoint class ARE generated) but selects no verb, so no route is
-  generated either. `Endpoints.Nested` alone is the common way to hit this: it
-  only switches the nested *form* of whichever verbs are also set, so on its
-  own it selects nothing.
+- `EZR014` (Info) — the model is `Endpoints.None`, so it publishes no routes.
+  The table, the DTOs and the repository are still there; only the endpoint
+  class is not.
+- `EZR015` (Info) — the model's `Endpoints` is non-zero but selects no verb, so
+  again no route is generated. `Endpoints.Nested` alone is the common way to hit
+  this: it only switches the nested *form* of whichever verbs are also set, so
+  on its own it selects nothing.
 
 `EZR014` and `EZR015` are both informational, not mistakes, but easy to miss:
 MSBuild's console logger hides Info diagnostics at the default verbosity, so
@@ -343,6 +353,9 @@ public partial class SensorReadingModel
 ```
 
 ## Rich domain models (aggregates)
+
+An aggregate is a **domain entity** (DDD). It is shaped by your domain, not by a
+table, and it guards its own state.
 
 Some classes have rules to protect. A plain `[Model]` gives you a `PUT` that overwrites every
 field. That is fine for simple data, but wrong when the class must guard its own state.
@@ -517,8 +530,8 @@ The generator checks your models at compile time. Most problems stop the build (
 | EZR011 | Warning | A property looks like a foreign key (`XId`) but no `[Model]` has singular name `X`; add that model, or mark it `[Scalar]`. |
 | EZR012 | Error | An `[Aggregate]` does not have exactly one `[Factory]` entry point. |
 | EZR013 | Warning | `Endpoints.Create` is set without `Endpoints.Read`, so the `Create` response's `Location` header points at a `GET` route that does not exist. |
-| EZR014 | Info | The model has `Endpoints.None` (the default) and generates no repository, DTOs, or routes — just the `DbSet`. If this is a surprise, add an `Endpoints` value to `[Model]`. Console builds hide Info diagnostics at the default verbosity; run with `-v detailed` to see it (an IDE shows it as usual). |
-| EZR015 | Info | The model's `Endpoints` selects no verb (`List`/`Create`/`Read`/`Update`/`Delete`) — for example `Endpoints.Nested` alone. The repository, DTOs and endpoint class are still generated, but no route is, since `Nested` only switches the *form* of a verb that must also be set. Add at least one verb. |
+| EZR014 | Info | The model has `Endpoints.None` (the default), so it publishes no routes. The table, DTOs and repository are still generated. If this is a surprise, add an `Endpoints` value to `[Model]`. Console builds hide Info diagnostics at the default verbosity; run with `-v detailed` to see it (an IDE shows it as usual). |
+| EZR015 | Info | The model's `Endpoints` selects no verb (`List`/`Create`/`Read`/`Update`/`Delete`) — for example `Endpoints.Nested` alone. Everything else is still generated, but no route is, since `Nested` only switches the *form* of a verb that must also be set. Add at least one verb. |
 
 ## The Example project & tests
 
@@ -530,7 +543,7 @@ The generator checks your models at compile time. Most problems stop the build (
 - `RegistrationModel` — validation.
 - `SensorReadingModel` — `[Scalar]` to opt an id-shaped field out.
 - `ReviewModel` — more than one foreign key.
-- `AuditLogModel` — `Endpoints.None`: persistence with no API at all.
+- `AuditLogModel` — `Endpoints.None`: a table and a repository, but no routes.
 - `ExchangeRateModel` — `Endpoints.ReadOnly`: only the `GET` routes.
 - `AuditNoteModel` — `Endpoints.Crud`: a child of `AuditLogModel` whose nested routes are deliberately left off, so it only appears at its flat, top-level path.
 - `OrderAggregate`, `ShoppingCartAggregate` (constructor factory), `InvoiceAggregate` (`OwnsMany` child) — DDD aggregates.
@@ -544,6 +557,12 @@ dotnet test
 ```
 
 One test class, `OpenApiDocumentTests`, only reads the OpenAPI document and needs no database or Docker. The database-backed classes are marked `[Collection("MsSql")]` and share one container.
+
+## Design docs
+
+This README is the user guide. [`docs/`](docs/) holds the specs — what the
+generator guarantees, and why — plus how it is built and tested.
+[`ROADMAP.md`](ROADMAP.md) tracks what is done and what is next.
 
 ---
 

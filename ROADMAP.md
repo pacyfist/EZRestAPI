@@ -1,145 +1,123 @@
-# Production readiness roadmap
+# Roadmap
 
-Goal: take EZRestAPI from "solid prototype" to a generator that teams can adopt
-for real services. Phases are ordered so that each one unlocks the next; within
-a phase, items are ordered by priority. Every item lands with tests (generator
-snapshot tests and/or HTTP integration tests) and README updates.
+Goal: take EZRestAPI from a solid prototype to a generator a team can adopt for
+a real service.
 
-## Phase 0 — Correctness hardening
+Phases are ordered so each one unlocks the next. Inside a phase, items are in
+priority order. Every item lands with tests and a docs update.
 
-Fix everything that can produce broken generated code, and make misuse fail
-with clear diagnostics instead of cryptic errors in invisible files.
+Design docs live in [`docs/`](docs/).
 
-- [x] **Escape C# keywords in identifiers.** Property names no longer become
-      generated identifiers at all (repositories consume DTOs and access
-      `request.{Property}`), and assembly names are sanitized into valid,
-      keyword-escaped namespaces via `ToValidNamespace`.
-- [x] **Replace the repository tuple API with generated read models.**
-      `ReadAsync` returns the generated `Read{Name}Response`, and
-      `CreateAsync`/`UpdateAsync` accept the request DTOs instead of one
-      parameter per property.
-- [x] **Handle degenerate models.** Zero-property and one-property models
-      generate valid code (covered by generator tests).
-- [x] **Analyzer diagnostics (`EZR001`–`EZR006`)** reported at the user's code:
-      class not `partial`, duplicate singular/plural names across models,
-      duplicate `[Nested]` names, a `[Model]` used as a navigation property
-      (must reference by id), and `[Nested]` cycles. (A diagnostic for
-      unsupported property types is deferred — needs a careful definition of
-      "supported" to avoid false positives.)
-- [x] **Generator snapshot tests.** `EZRestAPI.Tests` runs every generator
-      in-memory via `CSharpGeneratorDriver` and asserts generated output and
-      diagnostics per scenario in ~1s, no database needed. The Testcontainers
-      suite stays as the end-to-end layer. Bonus catch: generated files now
-      carry their own `using` directives instead of silently requiring
-      `ImplicitUsings` in the consuming project.
+## Done
 
-Exit criteria: no known input produces uncompilable output; every known misuse
-produces a targeted diagnostic; CI runs generator tests in seconds.
+- **Correctness hardening.** No known input produces uncompilable output.
+  Keyword-safe identifiers, DTO-based repository signatures, degenerate models
+  (zero and one property), `EZR001`–`EZR010`, and a fast in-memory generator
+  test suite that runs in about a second.
+- **Paginated list.** `GET /{plural}?page=&pageSize=`, clamped size, stable
+  ordering, `{ items, totalCount, page, pageSize }`.
+- **Validation.** DataAnnotations copied onto the generated DTOs and checked on
+  every write, returning `422` with an `errors` map.
+- **Error semantics.** `application/problem+json` everywhere, with `detail`,
+  `instance` and a machine-readable `code`.
+- **TypedResults and OpenAPI.** Union return types, stable `operationId`s, tags
+  per resource, and a typed schema for every status including errors.
+- **Relationships.** `{Singular}Id` foreign keys by convention, flat and nested
+  routes, parent scoping, `Restrict` on delete, `[Scalar]` to opt out.
+- **DDD aggregates.** `[Aggregate]` with `[Factory]` creation, `[Command]`
+  endpoints, encapsulated reads, and exception-to-status mapping. No `PUT`.
+- **Endpoint flags.** `[Model(..., Endpoints = ...)]`, opt-in, choosing which
+  routes are generated. Presets `Crud`, `ReadOnly`, `All`. The flags control
+  routes only — the `Id`, `DbSet`, DTOs and repository are always generated, so
+  `Endpoints.None` gives a typed way to use a table without publishing it.
+- **Example feature tour.** Fifteen models covering every feature, each backed
+  by an OpenAPI assertion and, where it has runtime behaviour, an integration
+  test.
 
-## Phase 1 — Table-stakes API features
+## Next — API features
 
-The features every production consumer expects on day one.
+- [ ] **Sorting and filtering.** `?sortBy=` checked against a generated
+      whitelist of scalar properties. Equality filters per scalar property to
+      start (`?title=foo`). No dynamic LINQ built from raw user strings.
+- [ ] **Kebab-case routes.** `AuditNotes` currently becomes `/auditnotes`.
+      Fix it with the `Route` option below, so a multi-word plural reads right.
 
-- [ ] **List endpoint with pagination.** `GET /{plural}?page=&pageSize=` (caps
-      enforced), stable default ordering by `Id`, response envelope with
-      `items`, `totalCount`, `page`, `pageSize`. Repository gets
-      `ListAsync(page, pageSize)`.
-- [ ] **Sorting and filtering.** `?sortBy=` validated against a generated
-      whitelist of scalar properties; equality filters per scalar property to
-      start (`?title=foo`). No dynamic LINQ from raw user strings.
-- [ ] **Validation.** Copy DataAnnotations (`[MaxLength]`, `[Range]`, etc.)
-      from model properties onto generated DTOs and enable minimal-API
-      validation (`AddValidation()`, .NET 10) so violations return 400
-      ProblemDetails instead of database-level 500s.
-- [ ] **Error semantics.** ProblemDetails everywhere (`AddProblemDetails()` in
-      the bootstrap), malformed-body and constraint-violation cases covered by
-      integration tests.
-- [ ] **TypedResults + OpenAPI metadata.** Generate handlers returning
-      `Results<Created<T>, ValidationProblem>` etc., so the OpenAPI document
-      accurately describes 200/201/204/400/404 without manual annotations.
+## Next — customization and security
 
-Exit criteria: a consumer can build a real UI against a generated API (browse,
-page, search, validate) using only generated endpoints; the OpenAPI doc is
-accurate enough to generate a client from.
+An all-or-nothing generator gets dropped at the first special case. Endpoint
+flags were the first opt-out; these are the rest.
 
-## Phase 2 — Customization and security
-
-An all-or-nothing generator gets abandoned at the first special case. Add
-opt-outs and hooks before adding more conventions.
-
-- [x] **Endpoint flags.** `[Model("Post", "Posts", Endpoints = Endpoints.ReadOnly)]`
-      selects which endpoints are generated, defaulting to `Endpoints.None`
-      (DbContext registration only). Presets: `Crud`, `ReadOnly`, `All`.
-      `EZR013` warns when `Create` is set without `Read`; `EZR014` reports a
-      model with no API surface.
-- [ ] **Remaining attribute options:** `Route = "blog-posts"`,
+- [ ] **Remaining `[Model]` options:** `Route = "blog-posts"`,
       `KeyType = KeyType.Guid`.
 - [ ] **Authorization.** `[Model(..., Policy = "PostEditor")]` →
-      `.RequireAuthorization("PostEditor")` on the group, with an
-      `AllowAnonymousRead` switch for public-read/private-write. Default stays
-      anonymous only when no policy is configured, and the README gains a
-      security section.
-- [ ] **Partial hooks.** Generated endpoint classes become `partial` with a
-      `static partial void Configure(RouteGroupBuilder group)` so users can add
-      rate limiting, output caching, or filters per model without forking.
-- [ ] **Optimistic concurrency.** Opt-in `rowversion` property on models →
-      ETag on GET, `If-Match` required on PUT/DELETE, `412 Precondition
-      Failed` on mismatch.
+      `.RequireAuthorization("PostEditor")` on the route group, with an
+      `AllowAnonymousRead` switch for public-read/private-write. Anonymous stays
+      the default only while no policy is configured. Needs a docs section.
+- [ ] **Partial hooks.** Make generated endpoint classes `partial` with a
+      `static partial void Configure(RouteGroupBuilder group)`, so a user can
+      add rate limiting, caching or filters per model without forking.
+- [ ] **Optimistic concurrency.** An opt-in `rowversion` property → `ETag` on
+      `GET`, `If-Match` required on `PUT`/`DELETE`, `412` on mismatch.
+- [ ] **Endpoint flags for `[Aggregate]`.** Deliberately left out of the
+      `[Model]` work.
 
-Exit criteria: the generator survives contact with one real special case per
-model without being ripped out.
+## Next — EF-faithful relationships
 
-## Phase 3 — Data layer maturity
+Links are declared by convention today. The goal is to also declare them the way
+EF Core does, with navigation properties carrying EF's own settings. Phased;
+design notes are in [docs/specs/relationships.md](docs/specs/relationships.md).
 
-- [ ] **Migrations story.** Document (and sample) EF migrations against the
-      generated `CustomDbContext`, including a design-time factory; make it
-      explicit that `EnsureCreated` is test-only.
-- [ ] **Split queries.** Models with multiple owned collections generate
-      `AsSplitQuery()` on reads to avoid cartesian explosion.
-- [ ] **Cross-aggregate references.** `public int AuthorId { get; set; }`
-      with `[References(typeof(AuthorModel))]` → FK constraint configured,
-      404/409 semantics when the referenced id does not exist.
-- [ ] **Provider matrix.** Integration tests against PostgreSQL (Testcontainers)
-      in addition to SQL Server; remove any provider-specific assumptions.
+- [ ] **P1 — one-to-many via navigation properties.** Cardinality inferred from
+      the nav shape, a generated foreign key, `[OnDelete]`, `[ForeignKey]`,
+      `[InverseProperty]`. Reverses `EZR004`. The heaviest phase.
+- [ ] **P2** — one-to-one.
+- [ ] **P3** — many-to-many, with link and unlink routes.
+- [ ] **P4** — composite and alternate keys, shadow FKs, self-references, and
+      the full delete-behavior matrix.
+
+## Next — data layer
+
+- [ ] **Migrations.** Document and sample EF migrations against the generated
+      `CustomDbContext`, including a design-time factory. Say plainly that
+      `EnsureCreated` is test-only.
+- [ ] **Split queries.** `AsSplitQuery()` on reads for models with more than one
+      owned collection, to avoid a cartesian blow-up.
+- [ ] **Provider matrix.** Run the integration tests against PostgreSQL as well
+      as SQL Server, and remove any provider-specific assumption.
 - [ ] Optional, opt-in: soft delete (`IsDeleted` filter) and audit fields
-      (`CreatedAt`/`UpdatedAt`).
+      (`CreatedAt` / `UpdatedAt`).
 
-Exit criteria: a schema change ships to a real database via migrations, and the
-generator is not silently SQL Server-only.
+## Next — packaging
 
-## Phase 4 — Packaging and adoption
-
-- [ ] **NuGet package.** Analyzer packaging layout (`analyzers/dotnet/cs`),
-      package README, source link, deterministic build, semantic versioning.
+- [ ] **NuGet package.** Analyzer layout (`analyzers/dotnet/cs`), package
+      README, source link, deterministic build, semantic versioning.
 - [ ] **Release automation.** Tag-triggered GitHub Actions publish using NuGet
-      trusted publishing (OIDC, no long-lived API keys).
-- [ ] **Models outside the web project.** Endpoints generation must activate
-      only where ASP.NET Core types exist (or via explicit assembly-level
-      opt-in), so a models class library + web host layout works.
-- [ ] **Docs.** Quick-start, feature matrix, customization reference, upgrade
-      notes, CHANGELOG. The Example project stays the living sample.
+      trusted publishing (OIDC, no long-lived keys).
+- [ ] **Models outside the web project.** Endpoint generation must only switch
+      on where ASP.NET Core types exist, or behind an assembly-level opt-in, so
+      a class library plus a web host works.
+- [ ] **Docs.** Upgrade notes and a CHANGELOG. The Example project stays the
+      living sample.
 
-Exit criteria: a stranger can `dotnet add package EZRestAPI` and have a working
-API in ten minutes without reading the source.
+## Later — confidence
 
-## Phase 5 — Production confidence
+- [ ] Benchmarks: generator throughput on large models, and the API hot paths.
+- [ ] Load-test the generated endpoints once and publish what it showed.
+- [ ] Port one small real service, write down every friction point, and feed the
+      list back into the customization phase.
 
-- [ ] Benchmark suite (generator throughput on large models; API hot paths).
-- [ ] Load-test the generated endpoints once, publish findings.
-- [ ] Dogfood: port one small real service and record every friction point;
-      feed that list back into Phase 2 options.
+## Why this order
 
-## Sequencing rationale
+Correctness came first because every later feature multiplies the surface where
+broken codegen can hide, and the repository signature change was breaking.
+API features are the difference between a toy and something usable;
+customization between usable and surviving real requirements; the data layer and
+packaging between surviving and being adoptable by a stranger. Benchmarks are
+evidence, and evidence comes last.
 
-Phase 0 first because every later feature multiplies the surface where broken
-codegen can hide, and the repository-signature change is breaking — it must
-land before adoption. Phase 1 is the difference between "toy" and "usable";
-Phase 2 between "usable" and "survives real requirements"; Phases 3–4 between
-"survives" and "adoptable by strangers". Phase 5 is evidence.
+## Not doing, for now
 
-## Explicit non-goals (for now)
-
-- GraphQL/OData/JSON:API surfaces.
-- Multi-tenancy, CQRS/event sourcing, message-bus integration.
-- Replacing hand-written APIs with complex domain logic — EZRestAPI targets
-  the CRUD-shaped 80%, and should say so loudly.
+- GraphQL, OData, or JSON:API surfaces.
+- Multi-tenancy, CQRS, event sourcing, message-bus integration.
+- Replacing hand-written APIs that hold real domain logic. EZRestAPI targets the
+  CRUD-shaped 80%, and should say so loudly.

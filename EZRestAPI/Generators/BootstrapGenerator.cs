@@ -30,10 +30,16 @@ public class BootstrapGenerator : IIncrementalGenerator
                     ? aggregates.First().AssemblyName
                     : models.First().AssemblyName;
 
-                // Both kinds expose a `{Singular}Repository` + `Map{Singular}Endpoints`
-                // — except Endpoints.None models, which are persistence only and
-                // generate neither, so naming them here would dangle.
+                // Every model and aggregate gets a `{Singular}Repository`, so all
+                // of them are registered.
                 var repositoryNames = models
+                    .Select(m => m.SingularName)
+                    .Concat(aggregates.Select(a => a.SingularName))
+                    .ToArray();
+
+                // Only non-None models get a `Map{Singular}Endpoints`; naming an
+                // Endpoints.None model here would dangle.
+                var endpointNames = models
                     .Where(m => m.Endpoints != ProviderExtensions.EndpointFeatures.None)
                     .Select(m => m.SingularName)
                     .Concat(aggregates.Select(a => a.SingularName))
@@ -70,7 +76,7 @@ public class BootstrapGenerator : IIncrementalGenerator
                 );
                 writer.WriteLine("{");
                 writer.Indent++;
-                foreach (var name in repositoryNames)
+                foreach (var name in endpointNames)
                 {
                     writer.WriteLine($"app.Map{name}Endpoints();");
                 }

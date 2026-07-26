@@ -711,11 +711,9 @@ public class RepositoryGenerator : IIncrementalGenerator
             modelsProvider,
             (ctx, model) =>
             {
-                if (model.Endpoints == ProviderExtensions.EndpointFeatures.None)
-                {
-                    return;
-                }
-
+                // Emitted for every model, Endpoints.None included: the flags
+                // decide which routes exist, not whether the model has a typed
+                // way to reach its table.
                 var writer = SourceWriter.Create();
 
                 writer.WriteLine($"namespace {model.AssemblyName};");
